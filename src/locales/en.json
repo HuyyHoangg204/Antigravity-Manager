@@ -35,6 +35,7 @@
     },
     "nav": {
         "dashboard": "Dashboard",
+        "chat": "Chat",
         "accounts": "Accounts",
         "proxy": "API Proxy",
         "settings": "Settings",

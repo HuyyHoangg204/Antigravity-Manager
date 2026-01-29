@@ -35,6 +35,7 @@
     },
     "nav": {
         "dashboard": "Tổng quan",
+        "chat": "Chat AI",
         "accounts": "Tài khoản",
         "proxy": "API Proxy",
         "settings": "Cài đặt",

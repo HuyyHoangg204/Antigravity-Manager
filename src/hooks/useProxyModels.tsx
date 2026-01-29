@@ -40,6 +40,13 @@ export const useProxyModels = () => {
             group: 'Gemini 3',
             icon: <ImageIcon size={16} />
         },
+        {
+            id: 'gemini-3-pro-image-16-9',
+            name: 'Gemini 3 Pro (Image 16:9)',
+            desc: t('proxy.model.pro_image_16_9'),
+            group: 'Gemini 3',
+            icon: <ImageIcon size={16} />
+        },
 
         // Gemini 2.5 Series
         {

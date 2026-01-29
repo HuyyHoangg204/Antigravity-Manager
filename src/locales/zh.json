@@ -35,6 +35,7 @@
     },
     "nav": {
         "dashboard": "仪表盘",
+        "chat": "AI 对话",
         "accounts": "账号管理",
         "proxy": "API 反代",
         "settings": "设置",

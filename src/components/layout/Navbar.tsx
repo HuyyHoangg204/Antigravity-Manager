@@ -11,6 +11,7 @@ function Navbar() {
     const navItems = [
         { path: '/', label: t('nav.dashboard') },
         { path: '/accounts', label: t('nav.accounts') },
+        { path: '/chat', label: t('nav.chat') || 'Chat' },
         { path: '/api-proxy', label: t('nav.proxy') },
         { path: '/settings', label: t('nav.settings') },
     ];

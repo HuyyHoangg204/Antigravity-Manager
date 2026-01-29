@@ -4,6 +4,7 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Settings from './pages/Settings';
+import ChatView from './pages/ChatView';
 import ApiProxy from './pages/ApiProxy';
 import Monitor from './pages/Monitor';
 import ThemeManager from './components/common/ThemeManager';
@@ -27,6 +28,10 @@ const router = createBrowserRouter([
       {
         path: 'accounts',
         element: <Accounts />,
+      },
+      {
+        path: 'chat',
+        element: <ChatView />,
       },
       {
         path: 'api-proxy',
