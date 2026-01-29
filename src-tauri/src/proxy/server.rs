@@ -891,31 +891,40 @@ async fn admin_get_stats_summary(
     Ok(Json(stats))
 }
 
-async fn admin_get_stats_hourly(
-    Query(params): Query<StatsRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = token_stats::get_hourly_stats(params.range).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))
-    })?;
-    Ok(Json(stats))
+async fn admin_get_token_stats_hourly() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_hourly_stats(24 * 7) // Default 7 days
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
-async fn admin_get_stats_daily(
-    Query(params): Query<StatsRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = token_stats::get_daily_stats(params.range).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))
-    })?;
-    Ok(Json(stats))
+async fn admin_get_token_stats_daily() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_daily_stats(30) // Default 30 days
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
-async fn admin_get_stats_weekly(
-    Query(params): Query<StatsRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = token_stats::get_weekly_stats(params.range).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))
-    })?;
-    Ok(Json(stats))
+async fn admin_get_token_stats_weekly() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_weekly_stats(12) // Default 12 weeks
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 async fn admin_get_stats_accounts(
@@ -927,13 +936,16 @@ async fn admin_get_stats_accounts(
     Ok(Json(stats))
 }
 
-async fn admin_get_stats_models(
-    Query(params): Query<StatsRequest>,
-) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = token_stats::get_model_stats(params.range).map_err(|e| {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))
-    })?;
-    Ok(Json(stats))
+async fn admin_get_token_stats_by_model() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_model_stats(24 * 30) // Default 30 days
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 
@@ -1183,21 +1195,36 @@ async fn admin_set_proxy_monitor_enabled(
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let enabled = payload.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
-    state.monitor.set_enabled(enabled);
-    logger::log_info(&format!("[API] 监控状态已设置为: {}", enabled));
+    
+    // [FIX #1269] 只有在状态真正改变时才记录日志并设置，避免重复触发导致的"重启"错觉
+    if state.monitor.is_enabled() != enabled {
+        state.monitor.set_enabled(enabled);
+        logger::log_info(&format!("[API] 监控状态已设置为: {}", enabled));
+    }
+    
     StatusCode::OK
 }
 
 async fn admin_get_proxy_logs_count_filtered(
     Query(params): Query<LogsRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let count = proxy_db::get_logs_count_filtered(&params.filter, params.errors_only)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(count))
+    let res = tokio::task::spawn_blocking(move || {
+        proxy_db::get_logs_count_filtered(&params.filter, params.errors_only)
+    }).await;
+
+    match res {
+        Ok(Ok(count)) => Ok(Json(count)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 async fn admin_clear_proxy_logs() -> impl IntoResponse {
-    let _ = proxy_db::clear_logs();
+    let _ = tokio::task::spawn_blocking(|| {
+        if let Err(e) = proxy_db::clear_logs() {
+             logger::log_error(&format!("[API] 清除反代日志失败: {}", e));
+        }
+    }).await;
     logger::log_info("[API] 已清除所有反代日志");
     StatusCode::OK
 }
@@ -1205,9 +1232,15 @@ async fn admin_clear_proxy_logs() -> impl IntoResponse {
 async fn admin_get_proxy_log_detail(
     Path(log_id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let log = crate::modules::proxy_db::get_log_detail(&log_id)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(log))
+    let res = tokio::task::spawn_blocking(move || {
+        crate::modules::proxy_db::get_log_detail(&log_id)
+    }).await;
+
+    match res {
+        Ok(Ok(log)) => Ok(Json(log)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -1226,13 +1259,20 @@ struct LogsFilterQuery {
 async fn admin_get_proxy_logs_filtered(
     Query(params): Query<LogsFilterQuery>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let logs = crate::modules::proxy_db::get_logs_filtered(
-        &params.filter,
-        params.errors_only,
-        params.limit,
-        params.offset,
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(logs))
+    let res = tokio::task::spawn_blocking(move || {
+        crate::modules::proxy_db::get_logs_filtered(
+            &params.filter,
+            params.errors_only,
+            params.limit,
+            params.offset,
+        )
+    }).await;
+
+    match res {
+        Ok(Ok(logs)) => Ok(Json(logs)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 async fn admin_get_proxy_stats(
@@ -1252,96 +1292,150 @@ struct StatsPeriodQuery {
 }
 
 async fn admin_get_token_stats_hourly(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_hourly_stats(p.hours.unwrap_or(24))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
+    let hours = p.hours.unwrap_or(24);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_hourly_stats(hours)
+    }).await;
 
-async fn admin_get_token_stats_daily(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_daily_stats(p.days.unwrap_or(7))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_weekly(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_weekly_stats(p.weeks.unwrap_or(4))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_by_account(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_account_stats(p.hours.unwrap_or(168))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_summary(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_summary_stats(p.hours.unwrap_or(168))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_by_model(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_model_stats(p.hours.unwrap_or(168))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_model_trend_hourly(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_model_trend_hourly(p.hours.unwrap_or(24))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_model_trend_daily(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_model_trend_daily(p.days.unwrap_or(7))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_account_trend_hourly(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_account_trend_hourly(p.hours.unwrap_or(24))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_get_token_stats_account_trend_daily(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let stats = crate::modules::token_stats::get_account_trend_daily(p.days.unwrap_or(7))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(stats))
-}
-
-async fn admin_clear_token_stats() -> impl IntoResponse {
-    // 雖然 token_stats 模組目前可能沒有導出清理方法，我們先預留接口
-    // 或直接刪除數據庫文件（更暴力但也有效）
-    logger::log_info("[API] 請求清理 Token 統計數據 (未實現)");
-    StatusCode::NOT_IMPLEMENTED
-}
-
-async fn admin_get_data_dir_path() -> impl IntoResponse {
-    match crate::modules::account::get_data_dir() {
-        Ok(p) => Json(p.to_string_lossy().to_string()),
-        Err(e) => Json(format!("Error: {}", e)),
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
     }
 }
 
-async fn admin_should_check_updates() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let settings = crate::modules::update_checker::load_update_settings()
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    let should = crate::modules::update_checker::should_check_for_updates(&settings);
-    Ok(Json(should))
+async fn admin_get_token_stats_daily(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let days = p.days.unwrap_or(7);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_daily_stats(days)
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
-async fn admin_get_antigravity_path() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let path = crate::commands::get_antigravity_path(Some(true)).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(path))
+async fn admin_get_token_stats_weekly(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let weeks = p.weeks.unwrap_or(4);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_weekly_stats(weeks)
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
-async fn admin_get_antigravity_args() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let args = crate::commands::get_antigravity_args().await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e })))?;
-    Ok(Json(args))
+async fn admin_get_token_stats_by_account(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let hours = p.hours.unwrap_or(168);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_account_stats(hours)
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_summary(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let hours = p.hours.unwrap_or(168);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_summary_stats(hours)
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_by_model(Query(p): Query<StatsPeriodQuery>) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let hours = p.hours.unwrap_or(168);
+    let res = tokio::task::spawn_blocking(move || {
+        token_stats::get_model_stats(hours)
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_model_trend_hourly() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_model_trend_hourly(24) // Default 24 hours
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_model_trend_daily() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_model_trend_daily(7) // Default 7 days
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_account_trend_hourly() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_account_trend_hourly(24) // Default 24 hours
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_get_token_stats_account_trend_daily() -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let res = tokio::task::spawn_blocking(|| {
+        token_stats::get_account_trend_daily(7) // Default 7 days
+    }).await;
+
+    match res {
+        Ok(Ok(stats)) => Ok(Json(stats)),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
+}
+
+async fn admin_clear_token_stats() -> impl IntoResponse {
+    let res = tokio::task::spawn_blocking(|| {
+         // Clear databases (brute force)
+         if let Ok(path) = token_stats::get_db_path() {
+             let _ = std::fs::remove_file(path);
+         }
+         let _ = token_stats::init_db();
+    }).await;
+    
+    match res {
+        Ok(_) => {
+            logger::log_info("[API] 已清除所有 Token 统计数据");
+            StatusCode::OK
+        }
+        Err(e) => {
+            logger::log_error(&format!("[API] 清除 Token 统计数据失败: {}", e));
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }
 
 async fn admin_get_update_settings() -> impl IntoResponse {
@@ -1489,9 +1583,15 @@ struct SaveFileRequest {
 async fn admin_save_text_file(
     Json(payload): Json<SaveFileRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    std::fs::write(&payload.path, &payload.content)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() })))?;
-    Ok(StatusCode::OK)
+    let res = tokio::task::spawn_blocking(move || {
+        std::fs::write(&payload.path, &payload.content)
+    }).await;
+
+    match res {
+        Ok(Ok(_)) => Ok(StatusCode::OK),
+        Ok(Err(e)) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e.to_string() }))),
+    }
 }
 
 async fn admin_save_http_api_settings(

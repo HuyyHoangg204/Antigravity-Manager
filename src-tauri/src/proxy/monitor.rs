@@ -160,11 +160,20 @@ impl ProxyMonitor {
 
     pub async fn get_logs(&self, limit: usize) -> Vec<ProxyRequestLog> {
         // Try to get from DB first for true history
-        match crate::modules::proxy_db::get_logs(limit) {
-            Ok(logs) => logs,
-            Err(e) => {
+        let db_result = tokio::task::spawn_blocking(move || {
+            crate::modules::proxy_db::get_logs(limit)
+        }).await;
+
+        match db_result {
+            Ok(Ok(logs)) => logs,
+            Ok(Err(e)) => {
                 tracing::error!("Failed to get logs from DB: {}", e);
                 // Fallback to memory
+                let logs = self.logs.read().await;
+                logs.iter().take(limit).cloned().collect()
+            }
+            Err(e) => {
+                tracing::error!("Spawn blocking failed for get_logs: {}", e);
                 let logs = self.logs.read().await;
                 logs.iter().take(limit).cloned().collect()
             }
@@ -172,10 +181,18 @@ impl ProxyMonitor {
     }
 
     pub async fn get_stats(&self) -> ProxyStats {
-        match crate::modules::proxy_db::get_stats() {
-            Ok(stats) => stats,
-            Err(e) => {
+        let db_result = tokio::task::spawn_blocking(|| {
+            crate::modules::proxy_db::get_stats()
+        }).await;
+
+        match db_result {
+            Ok(Ok(stats)) => stats,
+            Ok(Err(e)) => {
                 tracing::error!("Failed to get stats from DB: {}", e);
+                self.stats.read().await.clone()
+            }
+            Err(e) => {
+                tracing::error!("Spawn blocking failed for get_stats: {}", e);
                 self.stats.read().await.clone()
             }
         }
@@ -192,7 +209,14 @@ impl ProxyMonitor {
         let errors_only = level.as_deref() == Some("error");
         let search = search_text.unwrap_or_default();
 
-        crate::modules::proxy_db::get_logs_filtered(&search, errors_only, page_size, offset)
+        let res = tokio::task::spawn_blocking(move || {
+            crate::modules::proxy_db::get_logs_filtered(&search, errors_only, page_size, offset)
+        }).await;
+
+        match res {
+            Ok(r) => r,
+            Err(e) => Err(format!("Spawn blocking failed: {}", e)),
+        }
     }
     
     pub async fn clear(&self) {
@@ -201,8 +225,10 @@ impl ProxyMonitor {
         let mut stats = self.stats.write().await;
         *stats = ProxyStats::default();
 
-        if let Err(e) = crate::modules::proxy_db::clear_logs() {
-            tracing::error!("Failed to clear logs in DB: {}", e);
-        }
+        let _ = tokio::task::spawn_blocking(|| {
+            if let Err(e) = crate::modules::proxy_db::clear_logs() {
+                tracing::error!("Failed to clear logs in DB: {}", e);
+            }
+        }).await;
     }
 }
