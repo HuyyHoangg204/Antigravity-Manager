@@ -2,14 +2,42 @@ mod models;
 mod modules;
 mod commands;
 mod utils;
-mod proxy;  // 反代服务模块
+mod proxy;  // Proxy service module
 pub mod error;
+pub mod constants;
 
 use tauri::Manager;
 use modules::logger;
-use tracing::{info, error};
+use tracing::{info, warn, error};
+use std::sync::Arc;
 
-// 测试命令
+/// Increase file descriptor limit for macOS to prevent "Too many open files" errors
+#[cfg(target_os = "macos")]
+fn increase_nofile_limit() {
+    unsafe {
+        let mut rl = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        
+        if libc::getrlimit(libc::RLIMIT_NOFILE, &mut rl) == 0 {
+            info!("Current open file limit: soft={}, hard={}", rl.rlim_cur, rl.rlim_max);
+            
+            // Attempt to increase to 4096 or maximum hard limit
+            let target = 4096.min(rl.rlim_max);
+            if rl.rlim_cur < target {
+                rl.rlim_cur = target;
+                if libc::setrlimit(libc::RLIMIT_NOFILE, &rl) == 0 {
+                    info!("Successfully increased hard file limit to {}", target);
+                } else {
+                    warn!("Failed to increase file descriptor limit");
+                }
+            }
+        }
+    }
+}
+
+// Test command
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -17,9 +45,129 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 初始化日志
+    // Check for headless mode
+    let args: Vec<String> = std::env::args().collect();
+    let is_headless = args.iter().any(|arg| arg == "--headless");
+
+    // Increase file descriptor limit (macOS only)
+    #[cfg(target_os = "macos")]
+    increase_nofile_limit();
+
+    // Initialize logger
     logger::init_logger();
+
+    // Initialize token stats database
+    if let Err(e) = modules::token_stats::init_db() {
+        error!("Failed to initialize token stats database: {}", e);
+    }
     
+    if is_headless {
+        info!("Starting in HEADLESS mode...");
+        
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        rt.block_on(async {
+            // Initialize states manually
+            let proxy_state = commands::proxy::ProxyServiceState::new();
+            let cf_state = Arc::new(commands::cloudflared::CloudflaredState::new());
+
+            // Load config
+            match modules::config::load_app_config() {
+                Ok(mut config) => {
+                    // Force LAN access in headless/docker mode so it binds to 0.0.0.0
+                    config.proxy.allow_lan_access = true;
+
+                    // [NEW] 支持通过环境变量注入 API Key
+                    // 优先级：ABV_API_KEY > API_KEY > 配置文件
+                    let env_key = std::env::var("ABV_API_KEY")
+                        .or_else(|_| std::env::var("API_KEY"))
+                        .ok();
+
+                    if let Some(key) = env_key {
+                        if !key.trim().is_empty() {
+                            info!("Using API Key from environment variable");
+                            config.proxy.api_key = key;
+                        }
+                    }
+
+                    // [NEW] 支持通过环境变量注入 Web UI 密码
+                    // 优先级：ABV_WEB_PASSWORD > WEB_PASSWORD > 配置文件
+                    let env_web_password = std::env::var("ABV_WEB_PASSWORD")
+                        .or_else(|_| std::env::var("WEB_PASSWORD"))
+                        .ok();
+                    
+                    if let Some(pwd) = env_web_password {
+                        if !pwd.trim().is_empty() {
+                            info!("Using Web UI Password from environment variable");
+                            config.proxy.admin_password = Some(pwd);
+                        }
+                    }
+
+                    // [NEW] 支持通过环境变量注入鉴权模式
+                    // 优先级：ABV_AUTH_MODE > AUTH_MODE > 配置文件
+                    let env_auth_mode = std::env::var("ABV_AUTH_MODE")
+                        .or_else(|_| std::env::var("AUTH_MODE"))
+                        .ok();
+                    
+                    if let Some(mode_str) = env_auth_mode {
+                        let mode = match mode_str.to_lowercase().as_str() {
+                            "off" => Some(crate::proxy::ProxyAuthMode::Off),
+                            "strict" => Some(crate::proxy::ProxyAuthMode::Strict),
+                            "all_except_health" => Some(crate::proxy::ProxyAuthMode::AllExceptHealth),
+                            "auto" => Some(crate::proxy::ProxyAuthMode::Auto),
+                            _ => {
+                                warn!("Invalid AUTH_MODE: {}, ignoring", mode_str);
+                                None
+                            }
+                        };
+                        if let Some(m) = mode {
+                            info!("Using Auth Mode from environment variable: {:?}", m);
+                            config.proxy.auth_mode = m;
+                        }
+                    }
+
+                    info!("--------------------------------------------------");
+                    info!("🚀 Headless mode proxy service starting...");
+                    info!("📍 Port: {}", config.proxy.port);
+                    info!("🔑 Current API Key: {}", config.proxy.api_key);
+                    if let Some(ref pwd) = config.proxy.admin_password {
+                        info!("🔐 Web UI Password: {}", pwd);
+                    } else {
+                        info!("🔐 Web UI Password: (Same as API Key)");
+                    }
+                    info!("💡 Tips: You can use these keys to login to Web UI and access AI APIs.");
+                    info!("💡 Search docker logs or grep gui_config.json to find them.");
+                    info!("--------------------------------------------------");
+                    
+                    // Start proxy service
+                    if let Err(e) = commands::proxy::internal_start_proxy_service(
+                        config.proxy,
+                        &proxy_state,
+                        crate::modules::integration::SystemManager::Headless,
+                        cf_state.clone(),
+                    ).await {
+                        error!("Failed to start proxy service in headless mode: {}", e);
+                        std::process::exit(1);
+                    }
+                    
+                    info!("Headless proxy service is running.");
+                    
+                    // Start smart scheduler
+                    modules::scheduler::start_scheduler(None, proxy_state.clone());
+                    info!("Smart scheduler started in headless mode.");
+                }
+                Err(e) => {
+                    error!("Failed to load config for headless mode: {}", e);
+                    std::process::exit(1);
+                }
+            }
+            
+            // Wait for Ctrl-C
+            tokio::signal::ctrl_c().await.ok();
+            info!("Headless mode shutting down");
+        });
+        return;
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -28,6 +176,9 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = app.get_webview_window("main")
                 .map(|window| {
@@ -38,34 +189,78 @@ pub fn run() {
                 });
         }))
         .manage(commands::proxy::ProxyServiceState::new())
+        .manage(commands::cloudflared::CloudflaredState::new())
         .setup(|app| {
             info!("Setup starting...");
+
+            // Linux: Workaround for transparent window crash/freeze
+            // The transparent window feature is unstable on Linux with WebKitGTK
+            // We disable the visual alpha channel to prevent softbuffer-related crashes
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    // Access GTK window and disable transparency at the GTK level
+                    if let Ok(gtk_window) = window.gtk_window() {
+                        use gtk::prelude::WidgetExt;
+                        // Remove the visual's alpha channel to disable transparency
+                        if let Some(screen) = gtk_window.screen() {
+                            // Use non-composited visual if available
+                            if let Some(visual) = screen.system_visual() {
+                                gtk_window.set_visual(Some(&visual));
+                            }
+                        }
+                        info!("Linux: Applied transparent window workaround");
+                    }
+                }
+            }
+
             modules::tray::create_tray(app.handle())?;
             info!("Tray created");
             
-            // 自动启动反代服务
+            // 立即启动管理服务器 (8045)，以便 Web 端能访问
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                // 加载配置
+                // Load config
                 if let Ok(config) = modules::config::load_app_config() {
+                    let state = handle.state::<commands::proxy::ProxyServiceState>();
+                    let cf_state = handle.state::<commands::cloudflared::CloudflaredState>();
+                    let integration = crate::modules::integration::SystemManager::Desktop(handle.clone());
+                    
+                    // 1. 确保管理后台开启
+                    if let Err(e) = commands::proxy::ensure_admin_server(
+                        config.proxy.clone(),
+                        &state,
+                        integration.clone(),
+                        Arc::new(cf_state.inner().clone()),
+                    ).await {
+                        error!("Failed to start admin server: {}", e);
+                    } else {
+                        info!("Admin server (port {}) started successfully", config.proxy.port);
+                    }
+
+                    // 2. 自动启动转发逻辑
                     if config.proxy.auto_start {
-                        let state = handle.state::<commands::proxy::ProxyServiceState>();
-                        // 尝试启动服务
-                        if let Err(e) = commands::proxy::start_proxy_service(
+                        if let Err(e) = commands::proxy::internal_start_proxy_service(
                             config.proxy,
-                            state,
-                            handle.clone(),
+                            &state,
+                            integration,
+                            Arc::new(cf_state.inner().clone()),
                         ).await {
-                            error!("自动启动反代服务失败: {}", e);
+                            error!("Failed to auto-start proxy service: {}", e);
                         } else {
-                            info!("反代服务自动启动成功");
+                            info!("Proxy service auto-started successfully");
                         }
                     }
                 }
             });
             
-            // 启动智能调度器
-            modules::scheduler::start_scheduler(app.handle().clone());
+            // Start smart scheduler
+            let scheduler_state = app.handle().state::<commands::proxy::ProxyServiceState>();
+            modules::scheduler::start_scheduler(Some(app.handle().clone()), scheduler_state.inner().clone());
+            
+            // [PHASE 1] 已整合至 Axum 端口 (8045)，不再单独启动 19527 端口
+            info!("Management API integrated into main proxy server (port 8045)");
             
             Ok(())
         })
@@ -82,14 +277,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            // 账号管理命令
+            // Account management commands
             commands::list_accounts,
             commands::add_account,
             commands::delete_account,
             commands::delete_accounts,
             commands::reorder_accounts,
             commands::switch_account,
-            // 设备指纹
+            // Device fingerprint
             commands::get_device_profiles,
             commands::bind_device_profile,
             commands::bind_device_profile_with_profile,
@@ -101,26 +296,30 @@ pub fn run() {
             commands::delete_device_version,
             commands::open_device_folder,
             commands::get_current_account,
-            // 配额命令
+            // Quota commands
             commands::fetch_account_quota,
             commands::refresh_all_quotas,
-            // 配置命令
+            // Config commands
             commands::load_config,
             commands::save_config,
-            // 新增命令
+            // Additional commands
             commands::prepare_oauth_url,
             commands::start_oauth_login,
             commands::complete_oauth_login,
+            commands::complete_oauth_login,
             commands::cancel_oauth_login,
+            commands::submit_oauth_code,
             commands::import_v1_accounts,
             commands::import_from_db,
             commands::import_custom_db,
             commands::sync_account_from_db,
             commands::save_text_file,
+            commands::read_text_file,
             commands::clear_log_cache,
             commands::open_data_folder,
             commands::get_data_dir_path,
             commands::show_main_window,
+            commands::set_window_theme,
             commands::get_antigravity_path,
             commands::get_antigravity_args,
             commands::check_for_updates,
@@ -129,7 +328,7 @@ pub fn run() {
             commands::should_check_updates,
             commands::update_last_check_time,
             commands::toggle_proxy_status,
-            // 反代服务命令
+            // Proxy service commands
             commands::proxy::start_proxy_service,
             commands::proxy::stop_proxy_service,
             commands::proxy::get_proxy_status,
@@ -137,6 +336,11 @@ pub fn run() {
             commands::proxy::get_proxy_logs,
             commands::proxy::get_proxy_logs_paginated,
             commands::proxy::get_proxy_log_detail,
+            commands::proxy::get_proxy_logs_count,
+            commands::proxy::export_proxy_logs,
+            commands::proxy::export_proxy_logs_json,
+            commands::proxy::get_proxy_logs_count_filtered,
+            commands::proxy::get_proxy_logs_filtered,
             commands::proxy::set_proxy_monitor_enabled,
             commands::proxy::clear_proxy_logs,
             commands::proxy::generate_api_key,
@@ -146,12 +350,40 @@ pub fn run() {
             commands::proxy::get_proxy_scheduling_config,
             commands::proxy::update_proxy_scheduling_config,
             commands::proxy::clear_proxy_session_bindings,
-            // Autostart 命令
+            commands::proxy::set_preferred_account,
+            commands::proxy::get_preferred_account,
+            commands::proxy::clear_proxy_rate_limit,
+            commands::proxy::clear_all_proxy_rate_limits,
+            // Autostart commands
             commands::autostart::toggle_auto_launch,
             commands::autostart::is_auto_launch_enabled,
-            // 预热命令
+            // Warmup commands
             commands::warm_up_all_accounts,
             commands::warm_up_account,
+            // HTTP API settings commands
+            commands::get_http_api_settings,
+            commands::save_http_api_settings,
+            // Token 统计命令
+            commands::get_token_stats_hourly,
+            commands::get_token_stats_daily,
+            commands::get_token_stats_weekly,
+            commands::get_token_stats_by_account,
+            commands::get_token_stats_summary,
+            commands::get_token_stats_by_model,
+            commands::get_token_stats_model_trend_hourly,
+            commands::get_token_stats_model_trend_daily,
+            commands::get_token_stats_account_trend_hourly,
+            commands::get_token_stats_account_trend_daily,
+            proxy::cli_sync::get_cli_sync_status,
+            proxy::cli_sync::execute_cli_sync,
+            proxy::cli_sync::execute_cli_restore,
+            proxy::cli_sync::get_cli_config_content,
+            // Cloudflared commands
+            commands::cloudflared::cloudflared_check,
+            commands::cloudflared::cloudflared_install,
+            commands::cloudflared::cloudflared_start,
+            commands::cloudflared::cloudflared_stop,
+            commands::cloudflared::cloudflared_get_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

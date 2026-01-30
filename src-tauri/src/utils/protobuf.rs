@@ -1,4 +1,4 @@
-/// Protobuf Varint 编码
+/// Protobuf Varint Encoding
 pub fn encode_varint(mut value: u64) -> Vec<u8> {
     let mut buf = Vec::new();
     while value >= 0x80 {
@@ -9,7 +9,7 @@ pub fn encode_varint(mut value: u64) -> Vec<u8> {
     buf
 }
 
-/// 读取 Protobuf Varint
+/// Read Protobuf Varint
 pub fn read_varint(data: &[u8], offset: usize) -> Result<(u64, usize), String> {
     let mut result = 0u64;
     let mut shift = 0;
@@ -17,7 +17,7 @@ pub fn read_varint(data: &[u8], offset: usize) -> Result<(u64, usize), String> {
 
     loop {
         if pos >= data.len() {
-            return Err("数据不完整".to_string());
+            return Err("incomplete_data".to_string());
         }
         let byte = data[pos];
         result |= ((byte & 0x7F) as u64) << shift;
@@ -31,7 +31,7 @@ pub fn read_varint(data: &[u8], offset: usize) -> Result<(u64, usize), String> {
     Ok((result, pos))
 }
 
-/// 跳过 Protobuf 字段
+/// Skip Protobuf Field
 pub fn skip_field(data: &[u8], offset: usize, wire_type: u8) -> Result<usize, String> {
     match wire_type {
         0 => {
@@ -52,11 +52,11 @@ pub fn skip_field(data: &[u8], offset: usize, wire_type: u8) -> Result<usize, St
             // 32-bit
             Ok(offset + 4)
         }
-        _ => Err(format!("未知 wire_type: {}", wire_type)),
+        _ => Err(format!("unknown_wire_type: {}", wire_type)),
     }
 }
 
-/// 移除指定的 Protobuf 字段
+/// Remove specified Protobuf field
 pub fn remove_field(data: &[u8], field_num: u32) -> Result<Vec<u8>, String> {
     let mut result = Vec::new();
     let mut offset = 0;
@@ -68,10 +68,10 @@ pub fn remove_field(data: &[u8], field_num: u32) -> Result<Vec<u8>, String> {
         let current_field = (tag >> 3) as u32;
 
         if current_field == field_num {
-            // 跳过此字段
+            // Skip this field
             offset = skip_field(data, new_offset, wire_type)?;
         } else {
-            // 保留其他字段
+            // Keep other fields
             let next_offset = skip_field(data, new_offset, wire_type)?;
             result.extend_from_slice(&data[start_offset..next_offset]);
             offset = next_offset;
@@ -81,14 +81,14 @@ pub fn remove_field(data: &[u8], field_num: u32) -> Result<Vec<u8>, String> {
     Ok(result)
 }
 
-/// 查找指定的 Protobuf 字段内容 (Length-Delimited only)
+/// Find specified Protobuf field content (Length-Delimited only)
 pub fn find_field(data: &[u8], target_field: u32) -> Result<Option<Vec<u8>>, String> {
     let mut offset = 0;
 
     while offset < data.len() {
         let (tag, new_offset) = match read_varint(data, offset) {
             Ok(v) => v,
-            Err(_) => break, // 数据不完整，停止
+            Err(_) => break, // Incomplete data, stop
         };
 
         let wire_type = (tag & 7) as u8;
@@ -99,16 +99,16 @@ pub fn find_field(data: &[u8], target_field: u32) -> Result<Option<Vec<u8>>, Str
             return Ok(Some(data[content_offset..content_offset + length as usize].to_vec()));
         }
 
-        // 跳过字段
+        // Skip field
         offset = skip_field(data, new_offset, wire_type)?;
     }
 
     Ok(None)
 }
 
-/// 创建 OAuthTokenInfo (Field 6)
+/// Create OAuthTokenInfo (Field 6)
 /// 
-/// 结构：
+/// Structure:
 /// message OAuthTokenInfo {
 ///     optional string access_token = 1;
 ///     optional string token_type = 2;
@@ -144,8 +144,8 @@ pub fn create_oauth_field(access_token: &str, refresh_token: &str, expiry: i64) 
         f
     };
 
-    // Field 4: expiry (嵌套的 Timestamp 消息, wire_type = 2)
-    // Timestamp 消息包含: Field 1: seconds (int64, wire_type = 0)
+    // Field 4: expiry (Nested Timestamp message, wire_type = 2)
+    // Timestamp message contains: Field 1: seconds (int64, wire_type = 0)
     let timestamp_tag = (1 << 3) | 0;  // Field 1, varint
     let timestamp_msg = {
         let mut m = encode_varint(timestamp_tag);
@@ -161,14 +161,23 @@ pub fn create_oauth_field(access_token: &str, refresh_token: &str, expiry: i64) 
         f
     };
 
-    // 合并所有字段为 OAuthTokenInfo 消息
+    // Merge all fields into OAuthTokenInfo message
     let oauth_info = [field1, field2, field3, field4].concat();
 
-    // 包装为 Field 6 (length-delimited)
+    // Wrap as Field 6 (length-delimited)
     let tag6 = (6 << 3) | 2;
     let mut field6 = encode_varint(tag6);
     field6.extend(encode_varint(oauth_info.len() as u64));
     field6.extend(oauth_info);
 
     field6
+}
+
+/// Create Email (Field 2)
+pub fn create_email_field(email: &str) -> Vec<u8> {
+    let tag = (2 << 3) | 2;
+    let mut f = encode_varint(tag);
+    f.extend(encode_varint(email.len() as u64));
+    f.extend(email.as_bytes());
+    f
 }

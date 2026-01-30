@@ -4,7 +4,9 @@ use crate::proxy::config::{ProxyAuthMode, ProxyConfig};
 pub struct ProxySecurityConfig {
     pub auth_mode: ProxyAuthMode,
     pub api_key: String,
+    pub admin_password: Option<String>,
     pub allow_lan_access: bool,
+    pub port: u16,
 }
 
 impl ProxySecurityConfig {
@@ -12,7 +14,9 @@ impl ProxySecurityConfig {
         Self {
             auth_mode: config.auth_mode.clone(),
             api_key: config.api_key.clone(),
+            admin_password: config.admin_password.clone(),
             allow_lan_access: config.allow_lan_access,
+            port: config.port,
         }
     }
 
@@ -39,7 +43,9 @@ mod tests {
         let s = ProxySecurityConfig {
             auth_mode: ProxyAuthMode::Auto,
             api_key: "sk-test".to_string(),
+            admin_password: None,
             allow_lan_access: false,
+            port: 8080,
         };
         assert!(matches!(s.effective_auth_mode(), ProxyAuthMode::Off));
     }
@@ -49,7 +55,9 @@ mod tests {
         let s = ProxySecurityConfig {
             auth_mode: ProxyAuthMode::Auto,
             api_key: "sk-test".to_string(),
+            admin_password: None,
             allow_lan_access: true,
+            port: 8080,
         };
         assert!(matches!(
             s.effective_auth_mode(),

@@ -1,0 +1,13 @@
+target/
+node_modules/
+dist/
+.git/
+src-tauri/target/
+src-tauri/bin/
+*.deb
+*.app
+*.dmg
+*.zip
+.vscode/
+.idea/
+.DS_Store

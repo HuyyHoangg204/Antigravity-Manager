@@ -43,7 +43,8 @@ const QuotaProtection = ({ config, onChange }: QuotaProtectionProps) => {
     const monitoredModelsOptions = [
         { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
         { id: 'gemini-3-pro-high', label: 'Gemini 3 Pro High' },
-        { id: 'claude-sonnet-4-5', label: 'Claude 4.5 Sonnet' }
+        { id: 'claude-sonnet-4-5', label: 'Claude 4.5 Sonnet' },
+        { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' }
     ];
 
     // 计算示例值
@@ -111,7 +112,7 @@ const QuotaProtection = ({ config, onChange }: QuotaProtectionProps) => {
                                 {t('settings.quota_protection.monitored_models_desc')}
                             </p>
                         </div>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-4 gap-2">
                             {monitoredModelsOptions.map((model) => {
                                 const isSelected = config.monitored_models?.includes(model.id);
                                 return (

@@ -3,6 +3,7 @@
         "loading": "Loading...",
         "load_more": "Load More",
         "add": "Add",
+        "copy": "Copy",
         "action": "Action",
         "save": "Save",
         "saved": "Saved successfully",
@@ -31,12 +32,15 @@
         "enabled": "Enabled",
         "disabled": "Disabled",
         "tauri_api_not_loaded": "Tauri API not loaded, please restart the app",
-        "environment_error": "Environment error: {{error}}"
+        "environment_error": "Environment error: {{error}}",
+        "submit": "Submit"
     },
     "nav": {
         "dashboard": "Dashboard",
         "accounts": "Accounts",
         "proxy": "API Proxy",
+        "call_records": "Traffic Logs",
+        "token_stats": "Token Stats",
         "settings": "Settings",
         "theme_to_dark": "Switch to Dark Mode",
         "theme_to_light": "Switch to Light Mode",
@@ -51,7 +55,13 @@
         "switch_to_turkish": "Switch to Turkish",
         "switch_to_turkish_short": "TR",
         "switch_to_vietnamese": "Switch to Vietnamese",
-        "switch_to_vietnamese_short": "VI"
+        "switch_to_vietnamese_short": "VI",
+        "switch_to_russian": "Switch to Russian",
+        "switch_to_russian_short": "RU",
+        "switch_to_portuguese": "Switch to Portuguese",
+        "switch_to_portuguese_short": "PT",
+        "switch_to_korean": "Switch to Korean",
+        "switch_to_korean_short": "KO"
     },
     "dashboard": {
         "hello": "Hello, User 👋",
@@ -98,6 +108,11 @@
         "refresh_all": "Refresh All",
         "refresh_selected": "Refresh ({{count}})",
         "export_selected": "Export ({{count}})",
+        "import_json": "Import",
+        "import_success": "Successfully imported {{count}} accounts",
+        "import_partial": "Import completed: {{success}} succeeded, {{fail}} failed",
+        "import_fail": "Import failed: {{error}}",
+        "import_invalid_format": "Invalid JSON format, please ensure the file contains email and refresh_token fields",
         "delete_selected": "Delete ({{count}})",
         "current": "Current",
         "current_badge": "Current",
@@ -121,11 +136,49 @@
         "switch_to": "Switch to this account",
         "actions": "Actions",
         "device_fingerprint": "Device Fingerprint",
+        "device_fingerprint_dialog": {
+            "title": "Device Fingerprint",
+            "operations": "Device Fingerprint Operations",
+            "generate_and_bind": "Generate and Bind",
+            "restore_original": "Restore Original",
+            "open_storage_directory": "Open Storage Directory",
+            "current_storage": "Current Storage",
+            "effective": "Effective",
+            "current_storage_desc": "Read from storage.json (updated after applying binding when switching accounts)",
+            "account_binding": "Account Binding",
+            "pending_application": "Pending Application",
+            "account_binding_desc": "Saved as binding after generation/restoration, written to storage.json when switching accounts",
+            "historical_fingerprints": "Historical Fingerprints (optional restore/delete)",
+            "no_history": "No History",
+            "current": "Current",
+            "restore": "Restore",
+            "delete_version": "Delete this version",
+            "confirm_generate_title": "Confirm generate and bind?",
+            "confirm_generate_desc": "Will generate a new set of device fingerprints and set as current fingerprint. Confirm continue?",
+            "confirm_restore_title": "Confirm restore original fingerprint?",
+            "confirm_restore_desc": "Will restore to original fingerprint and overwrite current fingerprint. Confirm continue?",
+            "cancel": "Cancel",
+            "confirm": "Confirm",
+            "processing": "Processing...",
+            "loading": "Loading...",
+            "failed_to_load_device_info": "Failed to load device info",
+            "generation_failed": "Generation failed",
+            "binding_failed": "Binding failed",
+            "restoration_failed": "Restoration failed",
+            "deletion_failed": "Deletion failed",
+            "directory_open_failed": "Unable to open directory",
+            "generated_and_bound": "Generated and bound",
+            "restored": "Restored",
+            "deleted": "Deleted",
+            "directory_opened": "Storage directory opened",
+            "original_fingerprint_not_found": "Original fingerprint not found"
+        },
         "warmup_all": "One-click Warmup",
         "warmup_selected": "Warmup ({{count}})",
         "warmup_this": "Warmup this account",
         "warmup_now": "Warmup Now",
         "warmup_batch_triggered": "Warmup tasks triggered for {{count}} accounts",
+        "quota_protected": "Protected",
         "details": {
             "title": "Quota Details"
         },
@@ -149,7 +202,10 @@
                 "copy_link": "Copy Auth Link",
                 "copied": "Copied",
                 "link_label": "Authorization URL",
-                "link_click_to_copy": "Click to copy"
+                "link_click_to_copy": "Click to copy",
+                "manual_hint": "Browser didn't redirect? Paste the full callback URL or raw Code here:",
+                "manual_placeholder": "Paste callback URL or code...",
+                "error_no_flow": "Please click 'Start OAuth' first"
             },
             "token": {
                 "label": "Refresh Token",
@@ -266,6 +322,10 @@
             "example": "Example: At {{percentage}}%, an account with {{total}} quota will be disabled when remaining ≤ {{threshold}}",
             "auto_restore_info": "Account will be automatically re-enabled when quota resets"
         },
+        "pinned_quota_models": {
+            "title": "Pinned Quota Models",
+            "desc": "Choose which model quotas to display in the account list. Unselected models are only shown in the detail popup."
+        },
         "proxy": {
             "title": "Proxy Settings"
         },
@@ -298,7 +358,17 @@
             "clear_logs": "Clear Logs Cache",
             "clear_logs_title": "Clear Logs Confirmation",
             "clear_logs_msg": "Are you sure you want to clear all log cache files?",
-            "logs_cleared": "Logs cache cleared"
+            "logs_cleared": "Logs cache cleared",
+            "http_api_title": "HTTP API Service",
+            "http_api_desc": "Provides local HTTP interface for external programs (e.g. VS Code plugins).",
+            "http_api_enabled": "Enable HTTP API",
+            "http_api_enabled_desc": "When enabled, external programs can manage accounts via HTTP interface",
+            "http_api_port": "Listen Port",
+            "http_api_port_desc": "Restart required after changing port. If port conflict occurs, please use another available port.",
+            "http_api_port_placeholder": "Default port 19527",
+            "http_api_port_invalid": "Invalid port number (range: 1024-65535)",
+            "http_api_settings_saved": "HTTP API settings saved, restart required to apply",
+            "http_api_restart_required": "⚠️ Restart required to apply"
         },
         "about": {
             "title": "About",
@@ -369,6 +439,13 @@
             "warning_key": "Note: Keep your API key secure. Do not share it.",
             "api_key_invalid": "Invalid API key format, must start with sk- and be at least 10 characters long",
             "api_key_updated": "API key updated",
+            "admin_password": "Web UI Management Password",
+            "admin_password_tooltip": "Password used to log in to the Web management console. If empty, the API Key is used by default.",
+            "admin_password_default": "(Same as API Key)",
+            "admin_password_placeholder": "Enter new password, leave empty to use API Key",
+            "admin_password_hint": "Tip: In Docker/Web deployment scenarios, you can set a separate login password to improve the security of your API Key.",
+            "admin_password_short": "Password too short (at least 4 characters)",
+            "admin_password_updated": "Web UI login password updated",
             "auth": {
                 "title": "Authorization",
                 "title_tooltip": "Controls whether incoming requests must be authenticated, and which routes are protected.",
@@ -416,10 +493,10 @@
                     "advanced_tooltip": "Optional exact-match overrides. If an incoming model string matches a rule key, it will be replaced with the mapped z.ai model id.",
                     "from_label": "Incoming model",
                     "to_label": "z.ai model",
-                    "from_placeholder": "e.g. claude-opus-4-5-thinking",
-                    "to_placeholder": "e.g. glm-4.7",
                     "add_rule": "Add",
-                    "empty": "No override rules configured."
+                    "empty": "No override rules configured.",
+                    "from_placeholder": "From (e.g. claude-3-opus)",
+                    "to_placeholder": "To (e.g. glm-4)"
                 },
                 "modes": {
                     "off": "Off",
@@ -444,7 +521,7 @@
             },
             "request_timeout": "Request Timeout",
             "request_timeout_tooltip": "Maximum time (seconds) the proxy waits for an upstream response, including streaming. Increase for long generations; restart required to apply.",
-            "request_timeout_hint": "Default 120s, range 30-3600s. Restart service to apply changes.",
+            "request_timeout_hint": "Default 120s, range 30-7200s. Restart service to apply changes.",
             "enable_logging": "Enable Request Logging",
             "enable_logging_hint": "Record history for debugging (Minor perf cost)",
             "upstream_proxy": {
@@ -453,7 +530,9 @@
                 "enable": "Enable Upstream Proxy",
                 "url": "Proxy URL",
                 "url_placeholder": "e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:7890",
-                "tip": "Supports HTTP, HTTPS and SOCKS5."
+                "tip": "Supports HTTP, HTTPS and SOCKS5.",
+                "validation_error": "Proxy URL is required when upstream proxy is enabled",
+                "restart_hint": "Proxy settings saved. Restart the app to apply changes."
             },
             "scheduling": {
                 "title": "Account Rotation & Scheduling",
@@ -474,14 +553,75 @@
                 "max_wait": "Max Wait (sec)",
                 "max_wait_tooltip": "Only used in 'Cache First' mode: wait instead of switching if the rate limit reset time is below this value.",
                 "clear_bindings": "Clear Session Bindings",
-                "clear_bindings_tooltip": "Hard reset all session-account bindings, forcing accounts to be re-assigned on next request."
+                "clear_bindings_tooltip": "Hard reset all session-account bindings, forcing accounts to be re-assigned on next request.",
+                "clear_rate_limits": "Clear Rate Limit Records",
+                "clear_rate_limits_tooltip": "Immediately clear local rate limit records for all accounts, forcing next requests to try upstream directly."
+            },
+            "circuit_breaker": {
+                "title": "Adaptive Circuit Breaker",
+                "tooltip": "Automatically increases lockout duration for accounts that repeatedly fail with quota exhaustion. This prevents wasting API calls on dead accounts while allowing transient errors to recover quickly.",
+                "backoff_levels": "Backoff Levels (Seconds)",
+                "input_placeholder": "Enter backoff durations in seconds, separated by commas",
+                "level": "Lv {{level}}",
+                "invalid_format": "Invalid format. Use comma separated numbers (e.g. 60, 300)",
+                "clear_records": "Clear All Rate Limit Records"
             },
             "experimental": {
                 "title": "Experimental Settings",
                 "title_tooltip": "Exploratory features that may be adjusted or removed in future versions.",
                 "enable_usage_scaling": "Enable Usage Scaling",
-                "enable_usage_scaling_tooltip": "For Claude protocol. Enables aggressive scaling when total input exceeds 30k tokens to prevent frequent client-side compression. Note: Reported usage will not reflect actual billing after enabling."
+                "enable_usage_scaling_tooltip": "For Claude protocol. Enables aggressive scaling when total input exceeds 30k tokens to prevent frequent client-side compression. Note: Reported usage will not reflect actual billing after enabling.",
+                "context_compression_threshold_l1": "L1 Compression Threshold (Tool Trimming)",
+                "context_compression_threshold_l1_tooltip": "Trims old tool call records to save space. Recommended: 0.4 (40%)",
+                "context_compression_threshold_l2": "L2 Compression Threshold (Thinking Compression)",
+                "context_compression_threshold_l2_tooltip": "Compresses early thinking blocks while preserving signatures. Recommended: 0.55 (55%)",
+                "context_compression_threshold_l3": "L3 Compression Threshold (Summary Pivot)",
+                "context_compression_threshold_l3_tooltip": "Ultimate reset: generates an XML state summary and pivots to a fresh session. Most token-efficient. Recommended: 0.7 (70%)"
             }
+        },
+        "cloudflared": {
+            "title": "Public Access (Cloudflared)",
+            "subtitle": "Expose your local service to the internet via Cloudflare Tunnel",
+            "not_installed": "Cloudflared not installed",
+            "install_hint": "Cloudflared is a free tunnel tool from Cloudflare. It exposes your local proxy to the internet without a public IP or port forwarding. Click the button below to install.",
+            "install": "Install Now",
+            "installing": "Installing...",
+            "install_success": "Cloudflared installed successfully",
+            "install_failed": "Installation failed: {{error}}",
+            "installed": "Installed",
+            "version": "Version",
+            "mode_label": "Tunnel Mode",
+            "mode_quick": "Quick Tunnel",
+            "mode_quick_desc": "Auto-generated temporary URL (*.trycloudflare.com), no account needed, URL changes on restart",
+            "mode_auth": "Named Tunnel",
+            "mode_auth_desc": "Use Cloudflare account token, supports custom domain, persistent URL",
+            "token": "Tunnel Token",
+            "token_placeholder": "Paste your Cloudflare Tunnel Token here",
+            "token_hint": "Get from Cloudflare Zero Trust dashboard",
+            "token_required": "Token is required for Named Tunnel mode",
+            "use_http2": "Use HTTP/2",
+            "use_http2_desc": "More compatible, recommended for China mainland",
+            "status_label": "Tunnel Status",
+            "status_stopped": "Stopped",
+            "status_starting": "Starting...",
+            "status_running": "Running",
+            "status_stopping": "Stopping...",
+            "status_error": "Error",
+            "public_url": "Public URL",
+            "public_url_placeholder": "Public URL will appear here after tunnel starts",
+            "copy_url": "Copy URL",
+            "url_copied": "URL copied",
+            "start_tunnel": "Start Tunnel",
+            "stop_tunnel": "Stop Tunnel",
+            "running": "Tunnel Running",
+            "started": "Tunnel started",
+            "stopped": "Tunnel stopped",
+            "start_failed": "Start failed: {{error}}",
+            "stop_failed": "Stop failed: {{error}}",
+            "require_proxy_running": "Please start the local proxy service first",
+            "connection_info": "Connection Info",
+            "local_port": "Local Port",
+            "tunnel_protocol": "Tunnel Protocol"
         },
         "example": {
             "title": "Usage Examples",
@@ -503,7 +643,9 @@
             "regenerate_key_title": "Regenerate API Key",
             "regenerate_key_msg": "Are you sure you want to regenerate the API Key? The old key will be invalidated immediately.",
             "clear_bindings_title": "Clear Session Bindings",
-            "clear_bindings_msg": "Are you sure you want to clear all session-account bindings?"
+            "clear_bindings_msg": "Are you sure you want to clear all session-account bindings?",
+            "clear_rate_limits_title": "Clear Rate Limit Records",
+            "clear_rate_limits_confirm": "Are you sure you want to clear all local rate limit records?"
         },
         "model": {
             "flash": "Fast Response",
@@ -548,6 +690,10 @@
             "title": "Model Router",
             "subtitle": "Route models by series or add custom exact mappings.\nNote: Native Claude pass-through models (e.g. claude-opus-4-5-thinking) bypass series groups by default. Use \"Expert Custom Routing\" to override.",
             "subtitle_simple": "Customize model routing with wildcards or exact mappings",
+            "background_task_title": "Background Task Model",
+            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
+            "use_default": "Use System Default",
+            "current_model": "Current Model",
             "apply_presets": "Apply Presets",
             "presets_applied": "Presets applied successfully",
             "custom_mappings": "Custom Mappings",
@@ -596,12 +742,13 @@
             "default_suffix": " (Default)",
             "original_id": "Original ID",
             "route_to": "Route To",
-            "select_target_model": "Select Target Model"
+            "select_target_model": "Select Target Model",
+            "original_placeholder": "Original (e.g. gpt-4 or gpt-4*)"
         },
         "multi_protocol": {
             "title": "Multi-Protocol Support",
-            "subtitle": "Protocol Support",
-            "description": "Proxy service supports both OpenAI and Anthropic API formats to meet different tool requirements",
+            "subtitle": "Seamlessly integrate with your favorite AI tools and CLIs",
+            "description": "The local proxy supports OpenAI, Anthropic, and Gemini protocols, ensuring compatibility with a wide range of applications.",
             "openai_label": "OpenAI Protocol",
             "anthropic_label": "Anthropic Protocol",
             "openai_tools": "Cherry Studio, NextChat",
@@ -609,7 +756,8 @@
             "gemini_label": "Gemini Protocol",
             "gemini_tools": "Google AI SDK, LangChain",
             "quick_integration": "Quick Integration",
-            "click_tip": "👆 Click any model on the left to update this code."
+            "click_tip": "👆 Click a model to update code examples",
+            "copy_base": "Copy Base"
         },
         "supported_models": {
             "title": "Supported Models & Integration",
@@ -617,6 +765,35 @@
             "model_id": "Model ID",
             "description": "Description",
             "action": "Action"
+        },
+        "cli_sync": {
+            "title": "One-click CLI Sync",
+            "subtitle": "Quickly sync current API endpoints and keys to your local AI CLI tools.",
+            "card_title": "{{name}} Config",
+            "status": {
+                "not_installed": "Not detected",
+                "installed": "v{{version}}",
+                "synced": "Pointed to this app",
+                "not_synced": "Not synced",
+                "detecting": "Detecting...",
+                "current_base_url": "Current Base URL"
+            },
+            "btn_sync": "Sync Config Now",
+            "btn_view": "View Config",
+            "btn_restore": "Restore Defaults",
+            "btn_restore_backup": "Restore Backup",
+            "restore_confirm": "Are you sure you want to restore the configuration for {{name}} to the official default URL?",
+            "restore_backup_confirm": "Backup configuration found. Are you sure you want to restore it?",
+            "modal": {
+                "view_title": "{{name}} Config Content",
+                "copy_success": "Config content copied"
+            },
+            "toast": {
+                "sync_success": "Sync successful! {{name}} is ready.",
+                "sync_error": "Sync failed: {{error}}"
+            },
+            "sync_confirm_title": "Sync Confirmation",
+            "sync_confirm_message": "Ready to sync {{name}} configuration. ⚠️ Warning: This will overwrite your existing local configuration files (e.g. login tokens, API Keys). Are you sure you want to continue?"
         }
     },
     "monitor": {
@@ -641,12 +818,15 @@
             "gemini": "Gemini",
             "claude": "Claude",
             "images": "Images",
-            "reset": "Reset"
+            "reset": "Reset",
+            "by_account": "Filter by account",
+            "all_accounts": "All Accounts"
         },
         "table": {
             "status": "Status",
             "method": "Method",
             "model": "Model",
+            "protocol": "Protocol",
             "account": "Account",
             "path": "Path",
             "usage": "Tokens",
@@ -662,7 +842,11 @@
             "tokens": "Tokens (I/O)",
             "time": "Time",
             "model": "Model",
-            "id": "Request ID"
+            "mapped_model": "Mapped Model",
+            "protocol": "Protocol",
+            "account_used": "Account Used",
+            "id": "Request ID",
+            "payload_empty": "No data"
         },
         "dialog": {
             "clear_title": "Clear Proxy Logs",
@@ -673,6 +857,42 @@
         "title": "New Version Available",
         "message": "A new version is ready with optimizations and improvements. Current: v{{current}}",
         "action": "Update Now"
+    },
+    "login": {
+        "title": "Secure Access Control",
+        "desc": "Running in Web mode. Please enter management password or API Key to access.",
+        "placeholder": "Enter management password or API Key",
+        "btn_login": "Verify and Enter",
+        "note": "Note: If a separate management password is set, please enter it; otherwise, enter API_KEY.",
+        "lookup_hint": "If forgotten, run docker logs antigravity-manager to find Current API Key or Web UI Password",
+        "config_hint": "Or run grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json to view."
+    },
+    "token_stats": {
+        "title": "Token Consumption Stats",
+        "hourly": "Hour",
+        "daily": "Day",
+        "weekly": "Week",
+        "total_tokens": "Total Tokens",
+        "input_tokens": "Input Tokens",
+        "output_tokens": "Output Tokens",
+        "accounts_used": "Active Accounts",
+        "models_used": "Models Used",
+        "model_trend": "Model Usage Trend",
+        "account_trend": "Account Usage Trend",
+        "usage_trend": "Token Usage Trend",
+        "by_account": "By Account",
+        "by_model": "By Model",
+        "by_account_view": "By Account",
+        "model_details": "Model Breakdown",
+        "account_details": "Account Breakdown",
+        "model": "Model",
+        "account": "Account",
+        "requests": "Requests",
+        "input": "Input",
+        "output": "Output",
+        "total": "Total",
+        "percentage": "Share",
+        "no_data": "No data available"
     },
     "errors": {
         "stream": {

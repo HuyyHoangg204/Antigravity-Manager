@@ -87,6 +87,10 @@ pub struct AccountSummary {
     pub id: String,
     pub email: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub disabled: bool,
+    #[serde(default)]
+    pub proxy_disabled: bool,
     pub created_at: i64,
     pub last_used: i64,
 }

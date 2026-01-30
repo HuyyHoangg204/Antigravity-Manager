@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# 关闭已集成到 v3.3.16 的 PR 脚本
+# 关闭已集成到 v4.0.3 的 PR 脚本
 # 使用前请确保已安装并登录 GitHub CLI: brew install gh && gh auth login
 
 REPO="lbjlaq/Antigravity-Manager"
-VERSION="v3.3.16"
+VERSION="v4.0.3"
 
 # 感谢消息模板
 THANK_YOU_MESSAGE="感谢您的贡献！🎉
@@ -34,15 +34,15 @@ echo "关闭已集成到 ${VERSION} 的 PR"
 echo "================================================"
 echo ""
 
-# PR 列表：PR号 作者 标题
-declare -A PRS=(
-    ["395"]="ThanhNguyxn|fix: convert enum values to strings for Gemini compatibility"
-    ["394"]="ThanhNguyxn|feat: add account_email field to API monitoring logs"
-    ["371"]="AmbitionsXXXV|chore: update package-lock.json and enhance ApiProxy styles"
-    ["354"]="Mag1cFall|perf: concurrent quota refresh for all accounts"
-    ["353"]="Mag1cFall|refactor(ui): improve API proxy page visual design"
-    ["321"]="Stranmor|fix: increase response body limit to 10MB"
-    ["311"]="Jint8888|feat: Add audio transcription API (部分集成)"
+# PR 列表：格式为 "PR号|作者|标题"
+PRS_LIST=(
+    "825|IamAshrafee|[Internationalization] Device Fingerprint Dialog localization"
+    "822|Koshikai|[Japanese] Add missing translations and refine terminology",
+    "798|vietnhatthai|[Translation Fix] Correct spelling error in Vietnamese settings",
+    "846|lengjingxu|[核心功能] 客户端热更新与 Token 统计系统",
+    "949|lbjlaq|Streaming chunks order fix",
+    "950|lbjlaq|[Fix] Remove redundant code and update README",
+    "973|Mag1cFall|fix: 修复 Windows 平台启动参数不生效的问题"
 )
 
 # 检查 GitHub CLI 是否已安装
@@ -72,8 +72,10 @@ echo "✅ GitHub CLI 已就绪"
 echo ""
 
 # 遍历并处理每个 PR
-for PR_NUM in "${!PRS[@]}"; do
-    IFS='|' read -r AUTHOR TITLE <<< "${PRS[$PR_NUM]}"
+for item in "${PRS_LIST[@]}"; do
+    PR_NUM=$(echo "$item" | cut -d'|' -f1)
+    AUTHOR=$(echo "$item" | cut -d'|' -f2)
+    TITLE=$(echo "$item" | cut -d'|' -f3)
     
     echo "----------------------------------------"
     echo "处理 PR #${PR_NUM}: ${TITLE}"

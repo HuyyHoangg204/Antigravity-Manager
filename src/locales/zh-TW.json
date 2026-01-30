@@ -1,8 +1,10 @@
 {
     "common": {
+        "empty": "空",
         "loading": "載入中...",
         "load_more": "載入更多",
         "add": "新增",
+        "copy": "複製",
         "action": "操作",
         "save": "儲存",
         "saved": "儲存成功",
@@ -31,12 +33,15 @@
         "enabled": "已啟用",
         "disabled": "已停用",
         "tauri_api_not_loaded": "Tauri API 未正確載入,請重啟應用",
-        "environment_error": "環境錯誤: {{error}}"
+        "environment_error": "環境錯誤: {{error}}",
+        "submit": "提交"
     },
     "nav": {
         "dashboard": "儀表板",
         "accounts": "帳號管理",
         "proxy": "API 反向代理",
+        "token_stats": "統計",
+        "call_records": "流量日誌",
         "settings": "設定",
         "theme_to_dark": "切換到深色模式",
         "theme_to_light": "切換到淺色模式",
@@ -51,7 +56,13 @@
         "switch_to_turkish": "切換到土耳其文",
         "switch_to_turkish_short": "TR",
         "switch_to_vietnamese": "切換到越南文",
-        "switch_to_vietnamese_short": "VI"
+        "switch_to_vietnamese_short": "VI",
+        "switch_to_russian": "切換到俄文",
+        "switch_to_russian_short": "RU",
+        "switch_to_portuguese": "切換到葡萄牙文",
+        "switch_to_portuguese_short": "PT",
+        "switch_to_korean": "切換到韓語",
+        "switch_to_korean_short": "KO"
     },
     "dashboard": {
         "hello": "你好, 使用者 👋",
@@ -121,11 +132,50 @@
         "switch_to": "切換到此帳號",
         "actions": "操作",
         "device_fingerprint": "裝置指紋",
+        "device_fingerprint_dialog": {
+            "title": "裝置指紋",
+            "operations": "裝置指紋操作",
+            "generate_and_bind": "生成並綁定",
+            "restore_original": "恢復原始",
+            "open_storage_directory": "開啟儲存目錄",
+            "current_storage": "目前儲存",
+            "effective": "已生效",
+            "current_storage_desc": "從 storage.json 讀取（切換帳號時應用綁定後更新）",
+            "account_binding": "帳號綁定",
+            "pending_application": "待應用",
+            "account_binding_desc": "生成/恢復後儲存為綁定，切換帳號時寫入 storage.json",
+            "historical_fingerprints": "歷史指紋（可選恢復/刪除）",
+            "no_history": "暫無歷史",
+            "current": "目前",
+            "restore": "恢復",
+            "delete_version": "刪除此版本",
+            "confirm_generate_title": "確認生成並綁定？",
+            "confirm_generate_desc": "將生成一套新的裝置指紋並設定為目前指紋。確認繼續？",
+            "confirm_restore_title": "確認恢復原始指紋？",
+            "confirm_restore_desc": "將恢復為原始指紋並覆蓋目前指紋。確認繼續？",
+            "cancel": "取消",
+            "confirm": "確認",
+            "processing": "處理中...",
+            "loading": "載入中...",
+            "failed_to_load_device_info": "載入裝置資訊失敗",
+            "generation_failed": "生成失敗",
+            "binding_failed": "綁定失敗",
+            "restoration_failed": "恢復失敗",
+            "deletion_failed": "刪除失敗",
+            "directory_open_failed": "無法開啟目錄",
+            "generated_and_bound": "已生成並綁定",
+            "restored": "已恢復",
+            "deleted": "已刪除",
+            "directory_opened": "已開啟裝置儲存目錄",
+            "original_fingerprint_not_found": "未找到原始指紋",
+            "storage_json_not_found": "未找到 storage.json，請確認 Antigravity 已運行過並生成配置文件"
+        },
         "warmup_all": "一鍵預熱",
         "warmup_selected": "預熱 ({{count}})",
         "warmup_this": "預熱該帳號",
         "warmup_now": "立即預熱",
         "warmup_batch_triggered": "已成功為 {{count}} 個帳號觸發預熱任務",
+        "quota_protected": "受保護",
         "details": {
             "title": "配額詳情"
         },
@@ -149,7 +199,10 @@
                 "copy_link": "複製授權連結",
                 "copied": "已複製",
                 "link_label": "授權連結",
-                "link_click_to_copy": "點選複製"
+                "link_click_to_copy": "點選複製",
+                "manual_hint": "瀏覽器沒有自動跳轉？請在此處貼上回調連結或 Authorization Code：",
+                "manual_placeholder": "在此處貼上連結或代碼...",
+                "error_no_flow": "未找到活躍的授權流程，請重新開始 OAuth 授權。"
             },
             "token": {
                 "label": "Refresh Token",
@@ -266,6 +319,10 @@
             "example": "示例：設定 {{percentage}}% 時，{{total}} 次配額的帳號剩餘 ≤ {{threshold}} 次時將被自動停用",
             "auto_restore_info": "配額重置後將自動重新啟用帳號"
         },
+        "pinned_quota_models": {
+            "title": "配額關注列表",
+            "desc": "選擇要在帳號列表外層顯示的模型配額，未選中的模型只在詳情彈窗中顯示"
+        },
         "proxy": {
             "title": "代理設定"
         },
@@ -298,7 +355,17 @@
             "clear_logs": "清理紀錄快取",
             "clear_logs_title": "清理紀錄確認",
             "clear_logs_msg": "確定要清理所有紀錄快取檔案嗎？",
-            "logs_cleared": "紀錄快取已清理"
+            "logs_cleared": "紀錄快取已清理",
+            "http_api_title": "HTTP API 服務",
+            "http_api_desc": "為外部程式(如 VS Code 外掛)提供本地 HTTP 介面。",
+            "http_api_enabled": "啟用 HTTP API",
+            "http_api_enabled_desc": "啟用後,外部程式可透過 HTTP 介面管理帳號",
+            "http_api_port": "監聽通訊埠",
+            "http_api_port_desc": "修改通訊埠後需要重啟應用才能生效。如遇通訊埠衝突,請更換為其他未被佔用的通訊埠。",
+            "http_api_port_placeholder": "預設通訊埠 19527",
+            "http_api_port_invalid": "通訊埠號無效(範圍:1024-65535)",
+            "http_api_settings_saved": "HTTP API 設定已儲存,重啟應用後生效",
+            "http_api_restart_required": "⚠️ 需要重啟應用後生效"
         },
         "about": {
             "title": "關於",
@@ -369,6 +436,13 @@
             "warning_key": "注意：請妥善保管您的 API 金鑰，不要洩露給他人。",
             "api_key_invalid": "API 密鑰格式無效,必須以 sk- 開頭且長度至少 10 個字符",
             "api_key_updated": "API 密鑰已更新",
+            "admin_password": "Web UI 管理後台密碼",
+            "admin_password_tooltip": "用於登錄 Web 管理後台的密碼。如果為空，則默認使用 API 密鑰（API Key）。",
+            "admin_password_default": "（同 API 密鑰）",
+            "admin_password_placeholder": "輸入新密碼，留空則使用 API 密鑰",
+            "admin_password_hint": "提示：在 Docker/Web 部署場景中，您可以設置一個獨立的登錄密碼，提高 API 密鑰的安全性。",
+            "admin_password_short": "密碼太短（最少 4 個字符）",
+            "admin_password_updated": "Web UI 登錄密碼已更新",
             "auth": {
                 "title": "存取授權",
                 "title_tooltip": "控制代理是否需要鑑權，以及哪些路由需要提供 API 金鑰。",
@@ -416,10 +490,10 @@
                     "advanced_tooltip": "可選的精確比對覆蓋規則：如果 incoming model 字串與規則鍵完全一致，則替換為對應的 z.ai 模型 ID。",
                     "from_label": "incoming model",
                     "to_label": "z.ai 模型",
-                    "from_placeholder": "例如：claude-opus-4-5-thinking",
-                    "to_placeholder": "例如：glm-4.7",
                     "add_rule": "新增",
-                    "empty": "未配置任何覆蓋規則。"
+                    "empty": "尚未配置自定義替換規則。",
+                    "from_placeholder": "源模型 (如 claude-3-opus)",
+                    "to_placeholder": "映射至 (如 glm-4)"
                 },
                 "modes": {
                     "off": "關閉",
@@ -444,7 +518,7 @@
             },
             "request_timeout": "請求逾時",
             "request_timeout_tooltip": "代理等待上游響應的最大時間（秒），包含流式輸出。長文字/長推理可適當調大；修改後需重啟生效。",
-            "request_timeout_hint": "預設 120 秒，範圍 30-3600 秒。修改後需重啟服務生效。",
+            "request_timeout_hint": "預設 120 秒，範圍 30-7200 秒。修改後需重啟服務生效。",
             "enable_logging": "啟用請求紀錄",
             "enable_logging_hint": "記錄歷史紀錄以便除錯 (微小效能損耗)",
             "upstream_proxy": {
@@ -453,7 +527,9 @@
                 "enable": "啟用上游代理",
                 "url": "代理地址",
                 "url_placeholder": "例如: http://127.0.0.1:7890 或 socks5://127.0.0.1:7890",
-                "tip": "支援 HTTP、HTTPS 和 SOCKS5 協定。"
+                "tip": "支援 HTTP、HTTPS 和 SOCKS5 協定。",
+                "validation_error": "啟用上游代理時必須填寫代理地址",
+                "restart_hint": "代理設定已儲存，重新啟動應用程式後生效"
             },
             "scheduling": {
                 "title": "帳號輪換與會話排程",
@@ -474,13 +550,72 @@
                 "max_wait": "最大等待時長 (秒)",
                 "max_wait_tooltip": "僅在“快取優先”模式下生效：如果帳號限流重置時間小於此值，則原地等待而非切換帳號。",
                 "clear_bindings": "清除會話繫結",
-                "clear_bindings_tooltip": "立即斷開所有會話與帳號的繫結關係，強制下一次請求重新分配帳號。"
+                "clear_bindings_tooltip": "立即斷開所有會話與帳號的繫結關係，強制下一次請求重新分配帳號。",
+                "clear_rate_limits": "清除限流記錄",
+                "clear_rate_limits_tooltip": "立即清除所有帳號的本地限流記錄，強制下一次請求嘗試直接呼叫上游。",
+                "fixed_account": "固定帳戶模式",
+                "fixed_account_tooltip": "啟用後，所有 API 請求將只使用所選帳戶，而不會在帳戶之間輪換。",
+                "round_robin_set": "輪詢模式已啟用"
+            },
+            "circuit_breaker": {
+                "title": "自適應熔斷器",
+                "tooltip": "當帳號因配額耗盡反覆失敗時，自動增加鎖定時間。這可以防止在死帳號上浪費 API 呼叫，同時允許瞬態錯誤快速恢復。",
+                "backoff_levels": "退避等級 (秒)",
+                "input_placeholder": "輸入退避時長 (秒)，以逗號分隔",
+                "level": "等級 {{level}}",
+                "invalid_format": "格式無效。請使用逗號分隔的數字 (例如 60, 300)",
+                "clear_records": "清除所有限流記錄"
             },
             "experimental": {
                 "title": "實驗性設定 (Experimental)",
                 "title_tooltip": "探索性功能，可能在未來版本中調整或移除。",
                 "enable_usage_scaling": "啟用用量縮放",
-                "enable_usage_scaling_tooltip": "針對 Claude 相容協定。當總輸入超過 30k Token 時開啟激進縮放，防止在大上下文下頻繁觸發用戶端壓縮。注意：開啟後用戶端顯示的用量不再代表實際計費點數。"
+                "enable_usage_scaling_tooltip": "針對 Claude 協定。當總輸入超過 30k Token 時開啟激進縮放，防止在大上下文下頻繁觸發用戶端壓縮。注意：開啟後用戶端顯示的用量不再代表實際計費點數。"
+            },
+            "cloudflared": {
+                "title": "公網訪問 (Cloudflared)",
+                "subtitle": "透過 Cloudflare Tunnel 將本地服務暴露到網際網路",
+                "not_installed": "Cloudflared 未安裝",
+                "install_hint": "Cloudflared 是 Cloudflare 提供的免費隧道工具，可將本地代理暴露到網際網路，無需公網 IP 或埠轉發。點擊下方按鈕安裝。",
+                "install": "立即安裝",
+                "installing": "安裝中...",
+                "install_success": "Cloudflared 安裝成功",
+                "install_failed": "安裝失敗: {{error}}",
+                "installed": "已安裝",
+                "version": "版本",
+                "mode_label": "隧道模式",
+                "mode_quick": "快速隧道",
+                "mode_quick_desc": "自動生成臨時 URL (*.trycloudflare.com)，無需帳號，重啟後 URL 會變更",
+                "mode_auth": "命名隧道",
+                "mode_auth_desc": "使用 Cloudflare 帳號令牌，支援自訂網域，永久 URL",
+                "token": "隧道令牌",
+                "token_placeholder": "在此貼上您的 Cloudflare Tunnel Token",
+                "token_hint": "從 Cloudflare Zero Trust 控制台取得",
+                "token_required": "命名隧道模式需要令牌",
+                "use_http2": "使用 HTTP/2",
+                "use_http2_desc": "相容性更好，建議中國大陸使用",
+                "status_label": "隧道狀態",
+                "status_stopped": "已停止",
+                "status_starting": "啟動中...",
+                "status_running": "執行中",
+                "status_error": "錯誤",
+                "public_url": "公網 URL",
+                "public_url_copied": "已複製 URL",
+                "start_tunnel": "啟動隧道",
+                "stop_tunnel": "停止隧道",
+                "restart_tunnel": "重啟隧道",
+                "starting": "啟動中...",
+                "stopping": "停止中...",
+                "start_success": "隧道已成功啟動",
+                "stop_success": "隧道已停止",
+                "start_failed": "隧道啟動失敗: {{error}}",
+                "stop_failed": "隧道停止失敗: {{error}}",
+                "logs": "日誌",
+                "clear_logs": "清除日誌",
+                "auto_start": "隨代理自動啟動",
+                "auto_start_desc": "API 代理服務啟動時自動啟動隧道",
+                "warning_quick_mode": "⚠️ 快速模式: URL 會在每次重啟時變更",
+                "warning_token_storage": "💡 令牌會安全地儲存在本地"
             }
         },
         "example": {
@@ -500,7 +635,9 @@
             "regenerate_key_title": "重新生成 API Key",
             "regenerate_key_msg": "確定要重新生成 API Key 嗎？舊的 Key 將立即失效。",
             "clear_bindings_title": "清除會話繫結",
-            "clear_bindings_msg": "確定要清除所有會話與帳號的繫結對映嗎？"
+            "clear_bindings_msg": "確定要清除所有會話與帳號的繫結對映嗎？",
+            "clear_rate_limits_title": "清除限流記錄",
+            "clear_rate_limits_confirm": "確定要清除所有本地限流記錄嗎？"
         },
         "model": {
             "flash": "極速回應",
@@ -545,6 +682,10 @@
             "title": "模型路由中心 (Model Router)",
             "subtitle": "按“規格家族”統一路由 OpenAI/Claude 模型，或新增最高優先順序的“精確對映”。\n注意：Claude 原生直通模型（claude-opus-4-5-thinking 等 3 個）預設直通，需在“專家精確對映”中新增規則才能修改。",
             "subtitle_simple": "透過萬用字元或精確對映自定義模型路由規則",
+            "background_task_title": "Background Task Model",
+            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
+            "use_default": "Use System Default",
+            "current_model": "Current Model",
             "apply_presets": "應用預設對映",
             "presets_applied": "預設對映已應用",
             "custom_mappings": "自定義對映 (Custom Mappings)",
@@ -593,15 +734,16 @@
             "no_custom_mapping": "暫無自定義精確對映",
             "gemini3_only_warning": "⚠️ 僅支援 Gemini 3 系列",
             "default_suffix": "（預設）",
-            "select_target_model": "選擇目標模型"
+            "select_target_model": "選擇目標模型",
+            "original_placeholder": "原始名 (如 gpt-4 或 gpt-4*)"
         },
         "examples": {
             "title": "使用示例"
         },
         "multi_protocol": {
             "title": "多協定支援 (Multi-Protocol Support)",
-            "subtitle": "協定支援",
-            "description": "反向代理服務支援 OpenAI 和 Anthropic 兩種 API 格式，滿足不同工具需求",
+            "subtitle": "快速同步 API 地址與金鑰到本地 AI 工具",
+            "description": "反代服務支援 OpenAI、Anthropic 和 Gemini 協定，滿足不同工具的整合需求",
             "openai_label": "OpenAI 協定",
             "anthropic_label": "Anthropic 協定",
             "openai_tools": "Cherry Studio, NextChat",
@@ -609,7 +751,38 @@
             "gemini_label": "Gemini 協定",
             "gemini_tools": "Google AI SDK, LangChain",
             "quick_integration": "快速整合 (Quick Integration)",
-            "click_tip": "👆 點選左側任意模型以更新程式碼"
+            "click_tip": "👆 點擊模型以更新程式碼範例",
+            "copy_base": "複製 Base"
+        },
+        "cli_sync": {
+            "title": "CLI 配置一鍵同步",
+            "subtitle": "快速將當前 API 服務地址與 API 密鑰同步到本地 AI CLI 工具中",
+            "card_title": "{{name}} 配置",
+            "status": {
+                "not_installed": "未檢測到安裝",
+                "installed": "v{{version}}",
+                "synced": "已指向本項目",
+                "not_synced": "未同步",
+                "detecting": "檢測中...",
+                "current_base_url": "當前介面地址 (Base URL)"
+            },
+            "btn_sync": "立即同步配置",
+            "btn_view": "檢視當前配置",
+            "btn_restore": "恢復預設配置",
+            "btn_restore_backup": "還原原有配置",
+            "restore_backup_confirm": "檢測到舊的配置檔案備份，確定要還原嗎？",
+            "sync_confirm_title": "同步確認",
+            "sync_confirm_message": "即將為您同步 {{name}} 的配置。⚠️ 注意：此操作將覆蓋您本地已有的配置檔案（如登入狀態、API Key 等）。確定要繼續嗎？",
+            "restore_confirm": "確定要將 {{name}} 的配置恢復為官方預設 URL 嗎？",
+            "modal": {
+                "view_title": "{{name}} 配置文件內容",
+                "copy_success": "配置內容已複製到剪貼簿"
+            },
+            "toast": {
+                "config_missing": "請先生成 API Key 並啟動服務",
+                "sync_success": "同步成功！{{name}} 已準備就緒。",
+                "sync_error": "同步 {{name}} 失敗: {{error}}"
+            }
         },
         "supported_models": {
             "title": "支援模型與整合 (Supported Models & Integration)",
@@ -641,12 +814,15 @@
             "gemini": "Gemini",
             "claude": "Claude",
             "images": "繪圖",
-            "reset": "重置"
+            "reset": "重置",
+            "by_account": "按帳號篩選",
+            "all_accounts": "全部帳號"
         },
         "table": {
             "status": "狀態",
             "method": "方法",
             "model": "模型",
+            "protocol": "協定",
             "account": "帳號",
             "path": "路徑",
             "usage": "Token 消耗",
@@ -662,7 +838,11 @@
             "tokens": "Token 消耗 (輸入/輸出)",
             "time": "請求時間",
             "model": "使用模型",
-            "id": "請求 ID"
+            "id": "請求 ID",
+            "protocol": "協定類型",
+            "mapped_model": "路由後模型",
+            "account_used": "使用帳號",
+            "payload_empty": "無封包資料"
         },
         "dialog": {
             "clear_title": "清除監控紀錄",
@@ -674,13 +854,40 @@
         "message": "新版本已準備就緒，包含多項最佳化與改進。當前版本: v{{current}}",
         "action": "立即更新"
     },
-    "errors": {
-        "stream": {
-            "timeout_error": "請求逾時,請檢查網路連線",
-            "connection_error": "無法連線到伺服器,請檢查網路或代理設定",
-            "decode_error": "網路連線不穩定,資料傳輸中斷。建議: 1) 檢查網路連線 2) 更換代理節點 3) 稍後重試",
-            "stream_error": "資料流傳輸錯誤,請稍後重試",
-            "unknown_error": "發生未知錯誤,請稍後重試"
-        }
+    "login": {
+        "title": "安全存取控制",
+        "desc": "當前運行在 Web 模式下，請輸入管理密碼或 API Key 以進入後台。",
+        "placeholder": "請輸入管理密碼或 API Key",
+        "btn_login": "驗證並進入",
+        "note": "注意：如果設置了獨立的管理密碼，請輸入管理密碼；否則請輸入 API_KEY。",
+        "lookup_hint": "如果您忘記了，請運行 docker logs antigravity-manager 尋找 Current API Key 或 Web UI Password",
+        "config_hint": "或執行 grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json 查看。"
+    },
+    "token_stats": {
+        "title": "Token 消費統計",
+        "hourly": "每小時",
+        "daily": "每日",
+        "weekly": "每週",
+        "total_tokens": "總 Token",
+        "input_tokens": "輸入 Token",
+        "output_tokens": "輸出 Token",
+        "accounts_used": "活躍帳號",
+        "models_used": "使用模型",
+        "model_trend": "分模型使用趨勢",
+        "account_trend": "分帳號使用趨勢",
+        "usage_trend": "Token 使用趨勢",
+        "by_account": "分帳號統計",
+        "by_model": "按模型",
+        "by_account_view": "按帳號",
+        "model_details": "分模型詳細統計",
+        "account_details": "帳號詳細統計",
+        "model": "模型",
+        "account": "帳號",
+        "requests": "請求數",
+        "input": "輸入",
+        "output": "輸出",
+        "total": "合計",
+        "percentage": "佔比",
+        "no_data": "暫無資料"
     }
 }

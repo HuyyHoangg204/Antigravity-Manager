@@ -90,6 +90,15 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                                     {t('accounts.disabled').toUpperCase()}
                                 </span>
                             )}
+                            {account.proxy_disabled && (
+                                <span
+                                    className="px-1.5 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-orange-200/50"
+                                    title={account.proxy_disabled_reason || t('accounts.proxy_disabled_tooltip')}
+                                >
+                                    <Ban className="w-2.5 h-2.5" />
+                                    {t('accounts.proxy_disabled').toUpperCase()}
+                                </span>
+                            )}
                             {account.quota?.is_forbidden && (
                                 <span className="px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[9px] font-bold flex items-center gap-1 shadow-sm border border-red-200/50" title={t('accounts.forbidden_tooltip')}>
                                     <Lock className="w-2.5 h-2.5" />
@@ -338,7 +347,7 @@ function AccountCard({ account, selected, onSelect, isCurrent, isRefreshing, isS
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 }
 

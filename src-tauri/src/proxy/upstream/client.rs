@@ -5,13 +5,16 @@ use reqwest::{header, Client, Response, StatusCode};
 use serde_json::Value;
 use tokio::time::Duration;
 
-// Cloud Code v1internal endpoints (fallback order: prod → daily)
-// 优先使用稳定的 prod 端点，避免影响缓存命中率
+// Cloud Code v1internal endpoints (fallback order: Sandbox → Daily → Prod)
+// 优先使用 Sandbox/Daily 环境以避免 Prod环境的 429 错误 (Ref: Issue #1176)
 const V1_INTERNAL_BASE_URL_PROD: &str = "https://cloudcode-pa.googleapis.com/v1internal";
-const V1_INTERNAL_BASE_URL_DAILY: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal";
-const V1_INTERNAL_BASE_URL_FALLBACKS: [&str; 2] = [
-    V1_INTERNAL_BASE_URL_PROD,   // 优先使用生产环境（稳定）
-    V1_INTERNAL_BASE_URL_DAILY,  // 备用测试环境（新功能）
+const V1_INTERNAL_BASE_URL_DAILY: &str = "https://daily-cloudcode-pa.googleapis.com/v1internal";
+const V1_INTERNAL_BASE_URL_SANDBOX: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal";
+
+const V1_INTERNAL_BASE_URL_FALLBACKS: [&str; 3] = [
+    V1_INTERNAL_BASE_URL_SANDBOX, // 优先级 1: Sandbox (已知有效且稳定)
+    V1_INTERNAL_BASE_URL_DAILY,   // 优先级 2: Daily (备用)
+    V1_INTERNAL_BASE_URL_PROD,    // 优先级 3: Prod (仅作为兜底)
 ];
 
 pub struct UpstreamClient {
@@ -27,7 +30,7 @@ impl UpstreamClient {
             .pool_idle_timeout(Duration::from_secs(90))  // 空闲连接保持 90 秒
             .tcp_keepalive(Duration::from_secs(60))      // TCP 保活探测 60 秒
             .timeout(Duration::from_secs(600))
-            .user_agent("antigravity/3.3.32 windows/amd64");
+            .user_agent(crate::constants::USER_AGENT.as_str());
 
         if let Some(config) = proxy_config {
             if config.enabled && !config.url.is_empty() {
@@ -78,6 +81,18 @@ impl UpstreamClient {
         body: Value,
         query_string: Option<&str>,
     ) -> Result<Response, String> {
+        self.call_v1_internal_with_headers(method, access_token, body, query_string, std::collections::HashMap::new()).await
+    }
+
+    /// [FIX #765] 调用 v1internal API，支持透传额外的 Headers
+    pub async fn call_v1_internal_with_headers(
+        &self,
+        method: &str,
+        access_token: &str,
+        body: Value,
+        query_string: Option<&str>,
+        extra_headers: std::collections::HashMap<String, String>,
+    ) -> Result<Response, String> {
         // 构建 Headers (所有端点复用)
         let mut headers = header::HeaderMap::new();
         headers.insert(
@@ -91,8 +106,21 @@ impl UpstreamClient {
         );
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_static("antigravity/3.3.32 windows/amd64"),
+            header::HeaderValue::from_str(crate::constants::USER_AGENT.as_str())
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Invalid User-Agent header value, using fallback: {}", e);
+                    header::HeaderValue::from_static("antigravity")
+                }),
         );
+
+        // 注入额外的 Headers (如 anthropic-beta)
+        for (k, v) in extra_headers {
+            if let Ok(hk) = header::HeaderName::from_bytes(k.as_bytes()) {
+                if let Ok(hv) = header::HeaderValue::from_str(&v) {
+                    headers.insert(hk, hv);
+                }
+            }
+        }
 
         let mut last_err: Option<String> = None;
 
@@ -195,7 +223,11 @@ impl UpstreamClient {
         );
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_static("antigravity/3.3.32 windows/amd64"),
+            header::HeaderValue::from_str(crate::constants::USER_AGENT.as_str())
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Invalid User-Agent header value, using fallback: {}", e);
+                    header::HeaderValue::from_static("antigravity")
+                }),
         );
 
         let mut last_err: Option<String> = None;
