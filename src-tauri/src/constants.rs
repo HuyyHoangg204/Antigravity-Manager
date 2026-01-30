@@ -27,11 +27,13 @@ enum VersionSource {
 
 /// Fetch version from remote endpoint, with fallback to Cargo.toml
 /// Uses a separate thread to avoid blocking the main/UI thread
+fn fetch_remote_version() -> (String, VersionSource) {
     // [Re-applied Fix] Force use of local Cargo version to ensure stability.
     // The remote URL might return an older version string, causing "Version Not Supported" errors.
     
     // Fallback: Cargo.toml version (always valid at compile time)
     (FALLBACK_VERSION.to_string(), VersionSource::CargoToml)
+}
 
 /// Shared User-Agent string for all upstream API requests.
 /// Format: antigravity/{version} {os}/{arch}
