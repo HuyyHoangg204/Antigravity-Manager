@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Check } from 'lucide-react';
 import { ScheduledWarmupConfig } from '../../types/config';
+import { useProxyModels } from '../../hooks/useProxyModels';
 
 interface SmartWarmupProps {
     config: ScheduledWarmupConfig;
@@ -11,18 +12,25 @@ interface SmartWarmupProps {
 const SmartWarmup: React.FC<SmartWarmupProps> = ({ config, onChange }) => {
     const { t } = useTranslation();
 
-    const warmupModelsOptions = [
-        { id: 'gemini-3-flash', label: 'Gemini 3 Flash' },
-        { id: 'gemini-3-pro-high', label: 'Gemini 3 Pro High' },
-        { id: 'claude-sonnet-4-5', label: 'Claude 4.5 Sonnet' },
-        { id: 'gemini-3-pro-image', label: 'Gemini 3 Pro Image' }
-    ];
+    const { models } = useProxyModels();
+
+    // Group models by their group property
+    const groupedModels = React.useMemo(() => {
+        const groups: Record<string, typeof models> = {};
+        models.forEach(model => {
+            if (!groups[model.group]) {
+                groups[model.group] = [];
+            }
+            groups[model.group].push(model);
+        });
+        return groups;
+    }, [models]);
 
     const handleEnabledChange = (enabled: boolean) => {
         let newConfig = { ...config, enabled };
         // 如果开启预热且勾选列表为空，则默认勾选所有核心模型
         if (enabled && (!config.monitored_models || config.monitored_models.length === 0)) {
-            newConfig.monitored_models = warmupModelsOptions.map(o => o.id);
+            newConfig.monitored_models = models.map(o => o.id);
         }
         onChange(newConfig);
     };
@@ -79,32 +87,45 @@ const SmartWarmup: React.FC<SmartWarmupProps> = ({ config, onChange }) => {
                             <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest block mb-2">
                                 {t('settings.quota_protection.monitored_models_label', '监控模型')}
                             </label>
-                            <div className="grid grid-cols-4 gap-2">
-                                {warmupModelsOptions.map((model) => {
-                                    const isSelected = config.monitored_models?.includes(model.id);
-                                    return (
-                                        <div
-                                            key={model.id}
-                                            onClick={() => toggleModel(model.id)}
-                                            className={`
-                                                flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200
-                                                ${isSelected
-                                                    ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800/50 text-orange-700 dark:text-orange-400'
-                                                    : 'bg-gray-50/50 dark:bg-base-200/50 border-gray-100 dark:border-base-300/50 text-gray-500 hover:border-gray-200 dark:hover:border-base-300'}
-                                            `}
-                                        >
-                                            <span className="text-[11px] font-medium truncate pr-2">
-                                                {model.label}
-                                            </span>
-                                            <div className={`
-                                                w-4 h-4 rounded-full flex items-center justify-center transition-all duration-300
-                                                ${isSelected ? 'bg-orange-500 text-white scale-100' : 'bg-gray-200 dark:bg-base-300 text-transparent scale-75 opacity-0'}
-                                            `}>
-                                                <Check size={10} strokeWidth={4} />
-                                            </div>
+                            <div className="space-y-4">
+                                {Object.entries(groupedModels).map(([group, groupModels]) => (
+                                    <div key={group}>
+                                        <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 px-1">
+                                            {group}
                                         </div>
-                                    );
-                                })}
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                                            {groupModels.map((model) => {
+                                                const isSelected = config.monitored_models?.includes(model.id);
+                                                return (
+                                                    <div
+                                                        key={model.id}
+                                                        onClick={() => toggleModel(model.id)}
+                                                        className={`
+                                                            flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all duration-200
+                                                            ${isSelected
+                                                                ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800/50 text-orange-700 dark:text-orange-400'
+                                                                : 'bg-white dark:bg-base-200 border-gray-200 dark:border-base-300 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'}
+                                                        `}
+                                                        title={model.desc}
+                                                    >
+                                                        <div className="flex items-center gap-2 overflow-hidden">
+                                                            <span className="opacity-70">{model.icon}</span>
+                                                            <span className="text-[11px] font-medium truncate">
+                                                                {model.name}
+                                                            </span>
+                                                        </div>
+                                                        <div className={`
+                                                            w-4 h-4 rounded-full flex items-center justify-center transition-all duration-300 flex-shrink-0
+                                                            ${isSelected ? 'bg-orange-500 text-white scale-100' : 'bg-gray-200 dark:bg-base-300 text-transparent scale-75 opacity-0'}
+                                                        `}>
+                                                            <Check size={10} strokeWidth={4} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2 leading-relaxed">
                                 {t('settings.quota_protection.monitored_models_desc', '勾选需要监控的模型。当选中的任一模型利用率跌破阈值时，将触发保护')}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Send,
@@ -10,13 +10,17 @@ import {
     Loader2,
     Paperclip,
     X,
-    Upload
+    File as FileIcon,
+    Copy,
+    Check
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useConfigStore } from '../stores/useConfigStore';
 import { useProxyModels } from '../hooks/useProxyModels';
 import { cn } from '../utils/cn';
 import { showToast } from '../components/common/ToastContainer';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
     id: string;
@@ -26,6 +30,14 @@ interface Message {
     timestamp: number;
     status?: 'sending' | 'streaming' | 'completed' | 'error';
     error?: string;
+}
+
+interface Attachment {
+    id: string;
+    type: 'image' | 'file';
+    content: string; // Base64 for images, text content for files
+    name: string;
+    mimeType?: string;
 }
 
 interface ProxyStatus {
@@ -47,8 +59,7 @@ export default function ChatView() {
     const [isLoading, setIsLoading] = useState(false);
     const [proxyStatus, setProxyStatus] = useState<ProxyStatus | null>(null);
     const [isCheckingProxy, setIsCheckingProxy] = useState(true);
-    const [attachments, setAttachments] = useState<string[]>([]); // Base64 images
-    const [isDragging, setIsDragging] = useState(false);
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
     
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -86,24 +97,49 @@ export default function ChatView() {
     const processFiles = (files: FileList | null) => {
         if (!files) return;
         
-        const newAttachments: string[] = [];
+        const newAttachments: Attachment[] = [];
         const promises: Promise<void>[] = [];
 
         Array.from(files).forEach(file => {
-            if (!file.type.startsWith('image/')) {
-                showToast(t('Only image files are supported'), 'warning');
-                return;
-            }
-
+            const isImage = file.type.startsWith('image/');
+            // Simple check for text/code files based on common types or lack of binary signature
+            // For now, we'll try to read everything that isn't an image as text, 
+            // but ideally we could filter.
+            
             const promise = new Promise<void>((resolve) => {
                 const reader = new FileReader();
-                reader.onloadend = () => {
-                    if (typeof reader.result === 'string') {
-                        newAttachments.push(reader.result);
-                    }
-                    resolve();
-                };
-                reader.readAsDataURL(file);
+                
+                if (isImage) {
+                    reader.onloadend = () => {
+                        if (typeof reader.result === 'string') {
+                            newAttachments.push({
+                                id: crypto.randomUUID(),
+                                type: 'image',
+                                content: reader.result,
+                                name: file.name,
+                                mimeType: file.type
+                            });
+                        }
+                        resolve();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    reader.onloadend = () => {
+                        if (typeof reader.result === 'string') {
+                            newAttachments.push({
+                                id: crypto.randomUUID(),
+                                type: 'file',
+                                content: reader.result,
+                                name: file.name,
+                                mimeType: file.type
+                            });
+                        }
+                        resolve();
+                    };
+                    // Attempt to read as text. If it's a binary file like .exe, this might produce garbage,
+                    // but for code/config/logs it works well.
+                    reader.readAsText(file);
+                }
             });
             promises.push(promise);
         });
@@ -123,46 +159,40 @@ export default function ChatView() {
         setAttachments(prev => prev.filter((_, i) => i !== index));
     };
 
-    // Drag and Drop handlers
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!isLoading) {
-            setIsDragging(true);
-        }
-    }, [isLoading]);
-
-    const handleDragLeave = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-    }, []);
-
-    const handleDrop = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDragging(false);
-
-        if (isLoading || !proxyStatus?.running) return;
-
-        const files = e.dataTransfer.files;
-        if (files && files.length > 0) {
-            processFiles(files);
-        }
-    }, [isLoading, proxyStatus]);
 
 
     const handleSend = async () => {
         if ((!input.trim() && attachments.length === 0) || !proxyStatus?.running) return;
 
         const currentAttachments = [...attachments]; // Capture current attachments
-        const currentInput = input.trim();
+        
+        // Separate images and file content
+        const attachedImages = currentAttachments
+            .filter(a => a.type === 'image')
+            .map(a => a.content);
+
+        const attachedFiles = currentAttachments
+            .filter(a => a.type === 'file');
+
+        // Construct message content
+        let finalContent = input.trim();
+
+        // Append file contents to the message
+        if (attachedFiles.length > 0) {
+            const fileContext = attachedFiles.map(f => 
+                `\n\n--- File: ${f.name} ---\n${f.content}\n--- End of File ${f.name} ---`
+            ).join('\n');
+            
+            finalContent += fileContext;
+        }
+
+        if (!finalContent.trim() && attachedImages.length === 0) return;
 
         const userMessage: Message = {
             id: crypto.randomUUID(),
             role: 'user',
-            content: currentInput,
-            images: currentAttachments.length > 0 ? currentAttachments : undefined,
+            content: finalContent,
+            images: attachedImages.length > 0 ? attachedImages : undefined,
             timestamp: Date.now(),
             status: 'completed'
         };
@@ -340,29 +370,64 @@ export default function ChatView() {
         }
     };
 
-    // Helper to render message content with basic markdown image support
+    // Helper to render message content with basic markdown image support and file collapsing
     const renderMessageContent = (content: string) => {
-        // Regex to match markdown images: ![alt](url)
-        // We use a simple split to separate text blocks from image blocks
-        const parts = content.split(/(!\[.*?\]\(.*?\))/g);
+        // 1. First split by file blocks
+        // Regex to capture the whole block: --- File: name ---\ncontent\n--- End of File name ---
+        const fileBlockRegex = /(--- File: .*? ---\n[\s\S]*?\n--- End of File .*? ---)/g;
         
-        return parts.map((part, index) => {
-            const imageMatch = part.match(/!\[(.*?)\]\((.*?)\)/);
-            if (imageMatch) {
-                const alt = imageMatch[1];
-                const src = imageMatch[2];
+        const fileParts = content.split(fileBlockRegex);
+        
+        return fileParts.map((part, i) => {
+            // Check if this part is a file block
+            const fileMatch = part.match(/--- File: (.*?) ---\n([\s\S]*?)\n--- End of File \1 ---/);
+            
+            if (fileMatch) {
+                const fileName = fileMatch[1];
+                const fileContent = fileMatch[2];
                 return (
-                    <img 
-                        key={index} 
-                        src={src} 
-                        alt={alt} 
-                        className="max-w-full h-auto rounded-lg my-2 border border-base-300 mx-auto"
-                        onClick={() => window.open(src, '_blank')}
-                    />
+                    <details key={i} className="my-2 border border-base-300 rounded-lg bg-base-100 dark:bg-base-300 overflow-hidden">
+                        <summary className="px-3 py-2 cursor-pointer hover:bg-base-200 dark:hover:bg-base-200/50 text-xs font-semibold flex items-center gap-2 select-none">
+                            <FileIcon size={14} className="opacity-70" />
+                            <span>File: {fileName}</span>
+                            <span className="ml-auto opacity-50 text-[10px]">{fileContent.length} chars</span>
+                        </summary>
+                        <div className="p-3 bg-base-200/50 dark:bg-base-300/50 border-t border-base-300 overflow-x-auto">
+                            <pre className="text-[10px] font-mono whitespace-pre-wrap break-all max-h-60 overflow-y-auto">
+                                {fileContent}
+                            </pre>
+                        </div>
+                    </details>
                 );
             }
-            // For regular text, we want to preserve newlines
-            return <span key={index}>{part}</span>;
+
+            // 2. If not a file block, process as Markdown
+            return (
+                <div key={i} className="prose prose-sm dark:prose-invert max-w-none break-words">
+                    <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            img: ({node, ...props}) => (
+                                <img 
+                                    {...props} 
+                                    className="max-w-full h-auto rounded-lg my-2 border border-base-300 mx-auto cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(props.src, '_blank')}
+                                />
+                            ),
+                            a: ({node, ...props}) => (
+                                <a {...props} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" />
+                            ),
+                            pre: ({node, ...props}) => (
+                                <div className="mockup-code bg-base-300 text-base-content scale-90 -ml-4 origin-top-left w-[110%] my-4">
+                                    <pre {...props} className="bg-transparent px-5 py-2 overflow-x-auto" />
+                                </div>
+                            )
+                        }}
+                    >
+                        {part}
+                    </ReactMarkdown>
+                </div>
+            );
         });
     };
 
@@ -399,17 +464,7 @@ export default function ChatView() {
     return (
         <div 
             className="flex flex-col h-full bg-base-100 dark:bg-base-300 relative"
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
         >
-             {/* Drag Overlay */}
-             {isDragging && (
-                <div className="absolute inset-0 z-50 bg-primary/10 backdrop-blur-sm border-2 border-dashed border-primary m-4 rounded-2xl flex flex-col items-center justify-center text-primary pointer-events-none">
-                    <Upload size={48} className="mb-4 animate-bounce" />
-                    <p className="text-xl font-bold">{t('Drop images here to attach')}</p>
-                </div>
-            )}
 
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scroll-smooth">
@@ -423,7 +478,7 @@ export default function ChatView() {
                         <div 
                             key={msg.id} 
                             className={cn(
-                                "flex gap-4 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300",
+                                "flex gap-4 max-w-[96%] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300",
                                 msg.role === 'user' ? "justify-end" : "justify-start"
                             )}
                         >
@@ -465,6 +520,13 @@ export default function ChatView() {
                                     {msg.status === 'streaming' && (
                                         <span className="inline-block w-2 h-4 ml-1 align-middle bg-current opacity-50 animate-pulse"></span>
                                     )}
+                                    
+                                    {/* Copy Button for Assistant */}
+                                    {msg.role === 'assistant' && msg.status !== 'streaming' && (
+                                        <div className="flex justify-end mt-2 pt-2 border-t border-base-content/10">
+                                            <CopyButton content={msg.content} />
+                                        </div>
+                                    )}
                                 </div>
                                 {msg.error && (
                                     <span className="text-xs text-error flex items-center gap-1">
@@ -489,7 +551,7 @@ export default function ChatView() {
 
             {/* Input Area */}
             <div className="flex-none bg-white dark:bg-base-100 border-t border-base-200 p-4 md:px-6 md:py-5 z-20">
-                <div className="max-w-4xl mx-auto relative group">
+                <div className="max-w-[96%] mx-auto relative group">
                     {/* Model Selector & Actions */}
                     <div className="flex items-center gap-2 mb-2">
                          <div className="relative">
@@ -527,9 +589,16 @@ export default function ChatView() {
                     {/* Attachments Preview */}
                     {attachments.length > 0 && (
                         <div className="flex items-center gap-2 mb-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-base-300">
-                            {attachments.map((img, idx) => (
-                                <div key={idx} className="relative group/preview flex-none">
-                                    <img src={img} alt="preview" className="w-16 h-16 object-cover rounded-lg border border-base-300" />
+                            {attachments.map((att, idx) => (
+                                <div key={att.id} className="relative group/preview flex-none">
+                                    {att.type === 'image' ? (
+                                        <img src={att.content} alt={att.name} className="w-16 h-16 object-cover rounded-lg border border-base-300" />
+                                    ) : (
+                                        <div className="w-16 h-16 flex flex-col items-center justify-center bg-base-200 rounded-lg border border-base-300 p-1">
+                                            <FileIcon size={24} className="text-base-content/60 mb-1" />
+                                            <span className="text-[8px] text-base-content/60 truncate w-full text-center">{att.name}</span>
+                                        </div>
+                                    )}
                                     <button 
                                         onClick={() => removeAttachment(idx)}
                                         className="absolute -top-1.5 -right-1.5 bg-gray-500 hover:bg-red-500 text-white rounded-full p-0.5 shadow-md transition-colors"
@@ -553,11 +622,10 @@ export default function ChatView() {
                     
                     {/* Attachment Button */}
                     <div className="absolute left-2 bottom-4">
-                         <input 
+                        <input 
                             type="file" 
                             ref={fileInputRef}
                             className="hidden" 
-                            accept="image/*" 
                             multiple 
                             onChange={handleFileSelect}
                         />
@@ -565,7 +633,7 @@ export default function ChatView() {
                             onClick={() => fileInputRef.current?.click()}
                             disabled={isLoading}
                             className="btn btn-circle btn-sm btn-ghost text-base-content/50 hover:text-primary hover:bg-primary/10 transition-colors"
-                            title={t('Attach Image')}
+                            title={t('Attach File')}
                         >
                             <Paperclip size={20} />
                         </button>
@@ -602,5 +670,33 @@ export default function ChatView() {
                 </div>
             </div>
         </div>
+    );
+}
+
+function CopyButton({ content }: { content: string }) {
+    const [isCopied, setIsCopied] = useState(false);
+    const { t } = useTranslation();
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(content);
+            setIsCopied(true);
+            showToast(t('Copied to clipboard'), 'success');
+            setTimeout(() => setIsCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy keys:', err);
+            showToast(t('Failed to copy'), 'error');
+        }
+    };
+
+    return (
+        <button 
+            onClick={handleCopy}
+            className="btn btn-ghost btn-xs gap-1 text-base-content/50 hover:text-primary hover:bg-base-200"
+            title={t('Copy content')}
+        >
+            {isCopied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+            <span className="text-[10px] uppercase font-bold tracking-wider">{isCopied ? t('Copied') : t('Copy')}</span>
+        </button>
     );
 }
