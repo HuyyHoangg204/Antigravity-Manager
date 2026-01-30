@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Users, Sparkles, Bot, AlertTriangle, ArrowRight, Download, RefreshCw } from 'lucide-react';
+import { isTauri } from '../utils/env';
 import { useAccountStore } from '../stores/useAccountStore';
 import CurrentAccount from '../components/dashboard/CurrentAccount';
 import BestAccounts from '../components/dashboard/BestAccounts';
@@ -117,29 +118,42 @@ function Dashboard() {
                 return;
             }
 
-            const path = await save({
-                filters: [{
-                    name: 'JSON',
-                    extensions: ['json']
-                }],
-                defaultPath: `antigravity_accounts_${new Date().toISOString().split('T')[0]}.json`
-            });
-
-            if (!path) return;
-
             const exportData = accountsToExport.map(acc => ({
                 email: acc.email,
                 refresh_token: acc.token.refresh_token
             }));
-
             const content = JSON.stringify(exportData, null, 2);
+            const fileName = `antigravity_accounts_${new Date().toISOString().split('T')[0]}.json`;
 
-            await invoke('save_text_file', { path, content });
+            if (isTauri()) {
+                const path = await save({
+                    filters: [{
+                        name: 'JSON',
+                        extensions: ['json']
+                    }],
+                    defaultPath: fileName
+                });
 
-            showToast(t('dashboard.toast.export_success', { path }), 'success');
-        } catch (error) {
+                if (!path) return;
+
+                await invoke('save_text_file', { path, content });
+                showToast(t('dashboard.toast.export_success', { path }), 'success');
+            } else {
+                // Web 模式：使用浏览器下载
+                const blob = new Blob([content], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showToast(t('dashboard.toast.export_success', { path: fileName }), 'success');
+            }
+        } catch (error: any) {
             console.error('Export failed:', error);
-            showToast(`${t('dashboard.toast.export_error')}: ${error}`, 'error');
+            showToast(`${t('dashboard.toast.export_error')}: ${error.toString()}`, 'error');
         }
     };
 

@@ -1,8 +1,10 @@
 {
     "common": {
+        "empty": "Trống",
         "loading": "Đang tải...",
         "load_more": "Tải thêm",
         "add": "Thêm mới",
+        "copy": "Sao chép",
         "action": "Hành động",
         "save": "Lưu",
         "saved": "Đã lưu",
@@ -31,13 +33,16 @@
         "enabled": "Đã bật",
         "disabled": "Đã tắt",
         "tauri_api_not_loaded": "Tauri API chưa được tải, vui lòng khởi động lại ứng dụng",
-        "environment_error": "Lỗi môi trường: {{error}}"
+        "environment_error": "Lỗi môi trường: {{error}}",
+        "submit": "Gửi"
     },
     "nav": {
         "dashboard": "Tổng quan",
         "chat": "Chat AI",
         "accounts": "Tài khoản",
         "proxy": "API Proxy",
+        "token_stats": "Thống kê",
+        "call_records": "Nhật ký lưu lượng",
         "settings": "Cài đặt",
         "theme_to_dark": "Chuyển sang Chế độ Tối",
         "theme_to_light": "Chuyển sang Chế độ Sáng",
@@ -50,7 +55,11 @@
         "switch_to_turkish": "Chuyển sang Tiếng Thổ Nhĩ Kỳ",
         "switch_to_turkish_short": "TR",
         "switch_to_vietnamese": "Chuyển sang Tiếng Việt",
-        "switch_to_vietnamese_short": "VI"
+        "switch_to_vietnamese_short": "VI",
+        "switch_to_russian": "Chuyển sang tiếng Nga",
+        "switch_to_russian_short": "RU",
+        "switch_to_portuguese": "Chuyển sang tiếng Bồ Đào Nha",
+        "switch_to_portuguese_short": "PT"
     },
     "dashboard": {
         "hello": "Xin chào, Bạn 👋",
@@ -119,12 +128,51 @@
         "reset_time": "Thời gian reset",
         "switch_to": "Chuyển sang tài khoản này",
         "actions": "Thao tác",
-        "device_fingerprint": "Device Fingerprint",
+        "device_fingerprint": "Vân Tay Thiết Bị",
+        "device_fingerprint_dialog": {
+            "title": "Vân Tay Thiết Bị",
+            "operations": "Các Thao Tác Vân Tay Thiết Bị",
+            "generate_and_bind": "Tạo và Liên Kết",
+            "restore_original": "Khôi Phục Bản Gốc",
+            "open_storage_directory": "Mở Thư Mục Lưu Trữ",
+            "current_storage": "Lưu Trữ Hiện Tại",
+            "effective": "Hiệu Lực",
+            "current_storage_desc": "Đọc từ storage.json (cập nhật sau khi áp dụng liên kết khi chuyển tài khoản)",
+            "account_binding": "Liên Kết Tài Khoản",
+            "pending_application": "Đang Chờ Áp Dụng",
+            "account_binding_desc": "Được lưu như liên kết sau tạo/khôi phục, ghi vào storage.json khi chuyển tài khoản",
+            "historical_fingerprints": "Vân Tay Lịch Sử (tùy chọn khôi phục/xóa)",
+            "no_history": "Không Có Lịch Sử",
+            "current": "Hiện Tại",
+            "restore": "Khôi Phục",
+            "delete_version": "Xóa phiên bản này",
+            "confirm_generate_title": "Xác nhận tạo và liên kết?",
+            "confirm_generate_desc": "Sẽ tạo một bộ vân tay thiết bị mới và đặt làm vân tay hiện tại. Xác nhận tiếp tục?",
+            "confirm_restore_title": "Xác nhận khôi phục vân tay gốc?",
+            "confirm_restore_desc": "Sẽ khôi phục vân tay gốc và ghi đè lên vân tay hiện tại. Xác nhận tiếp tục?",
+            "cancel": "Hủy",
+            "confirm": "Xác Nhận",
+            "processing": "Đang Xử Lý...",
+            "loading": "Đang Tải...",
+            "failed_to_load_device_info": "Không thể tải thông tin thiết bị",
+            "generation_failed": "Tạo thất bại",
+            "binding_failed": "Liên kết thất bại",
+            "restoration_failed": "Khôi phục thất bại",
+            "deletion_failed": "Xóa thất bại",
+            "directory_open_failed": "Không thể mở thư mục",
+            "generated_and_bound": "Đã tạo và liên kết",
+            "restored": "Đã khôi phục",
+            "deleted": "Đã xóa",
+            "directory_opened": "Đã mở thư mục lưu trữ",
+            "original_fingerprint_not_found": "Không tìm thấy vân tay gốc",
+            "storage_json_not_found": "Không tìm thấy storage.json, vui lòng đảm bảo Antigravity đã được chạy để tạo tệp cấu hình"
+        },
         "warmup_all": "Làm nóng (Warmup) Tất cả",
         "warmup_selected": "Làm nóng ({{count}})",
         "warmup_this": "Làm nóng tài khoản này",
         "warmup_now": "Làm nóng Ngay",
         "warmup_batch_triggered": "Đã kích hoạt làm nóng cho {{count}} tài khoản",
+        "quota_protected": "Được bảo vệ",
         "details": {
             "title": "Chi tiết Hạn mức"
         },
@@ -148,7 +196,10 @@
                 "copy_link": "Sao chép Link xác thực",
                 "copied": "Đã sao chép",
                 "link_label": "URL Xác thực",
-                "link_click_to_copy": "Nhấn để sao chép"
+                "link_click_to_copy": "Nhấn để sao chép",
+                "manual_hint": "Trình duyệt không tự động chuyển hướng? Vui lòng dán liên kết phản hồi hoặc Mã xác thực tại đây:",
+                "manual_placeholder": "Dán liên kết hoặc mã tại đây...",
+                "error_no_flow": "Không tìm thấy luồng xác thực hoạt động. Vui lòng bắt đầu lại OAuth."
             },
             "token": {
                 "label": "Refresh Token",
@@ -200,7 +251,7 @@
             "delete_msg": "Bạn có chắc chắn muốn xóa tài khoản này? Hành động này không thể hoàn tác.",
             "refresh_title": "Làm mới Hạn mức",
             "batch_refresh_title": "Làm mới Hàng loạt",
-            "refresh_msg": "Bạn có chắc chắn muốn làm mới hạn mức cho tài khoản hiện đài?",
+            "refresh_msg": "Bạn có chắc chắn muốn làm mới hạn mức cho tài khoản hiện tại?",
             "batch_refresh_msg": "Bạn có chắc muốn làm mới hạn mức cho {{count}} tài khoản đã chọn? Việc này có thể mất chút thời gian.",
             "disable_proxy_title": "Tắt Proxy",
             "disable_proxy_msg": "Bạn có chắc muốn tắt proxy cho tài khoản này? Tài khoản vẫn dùng được trong app nhưng sẽ không nhận traffic từ proxy.",
@@ -228,10 +279,10 @@
             "theme_light": "Sáng",
             "theme_dark": "Tối",
             "theme_system": "Hệ thống",
-            "auto_launch": "Khởi động cùng Windows",
+            "auto_launch": "Mở khi đăng nhập",
             "auto_launch_enabled": "Đã bật",
             "auto_launch_disabled": "Đã tắt",
-            "auto_launch_desc": "Tự động chạy Antigravity Tools khi khởi động máy",
+            "auto_launch_desc": "Tự động mở Antigravity Tools khi bạn đăng nhập vào máy",
             "auto_check_update": "Tự động kiểm tra cập nhật",
             "auto_check_update_desc": "Tự động kiểm tra phiên bản mới khi mở app",
             "auto_check_update_enabled": "Đã bật tự động kiểm tra",
@@ -265,6 +316,10 @@
             "example": "Ví dụ: Tại {{percentage}}%, tài khoản có tổng hạn mức {{total}} sẽ bị vô hiệu hóa khi còn lại ≤ {{threshold}}",
             "auto_restore_info": "Tài khoản sẽ tự động được bật lại khi hạn mức hồi phục"
         },
+        "pinned_quota_models": {
+            "title": "Model Hạn mức Đã ghim",
+            "desc": "Chọn hạn mức model nào hiển thị trong danh sách tài khoản. Model không được chọn chỉ hiển thị trong popup chi tiết"
+        },
         "proxy": {
             "title": "Cài đặt Proxy"
         },
@@ -297,7 +352,17 @@
             "clear_logs": "Dọn dẹp Cache Logs",
             "clear_logs_title": "Xác nhận Dọn dẹp Logs",
             "clear_logs_msg": "Bạn có chắc muốn xóa tất cả file cache logs?",
-            "logs_cleared": "Đã dọn dẹp cache logs"
+            "logs_cleared": "Đã dọn dẹp cache logs",
+            "http_api_title": "Dịch vụ HTTP API",
+            "http_api_desc": "Cung cấp giao diện HTTP cục bộ cho các chương trình bên ngoài (ví dụ: tiện ích mở rộng VS Code).",
+            "http_api_enabled": "Bật HTTP API",
+            "http_api_enabled_desc": "Khi bật, các chương trình bên ngoài có thể quản lý tài khoản qua giao diện HTTP",
+            "http_api_port": "Cổng Lắng nghe",
+            "http_api_port_desc": "Cần khởi động lại ứng dụng sau khi thay đổi cổng. Nếu xảy ra xung đột cổng, vui lòng sử dụng cổng khả dụng khác.",
+            "http_api_port_placeholder": "Cổng mặc định 19527",
+            "http_api_port_invalid": "Số cổng không hợp lệ (phạm vi: 1024-65535)",
+            "http_api_settings_saved": "Đã lưu cài đặt HTTP API, cần khởi động lại để áp dụng",
+            "http_api_restart_required": "⚠️ Cần khởi động lại ứng dụng để áp dụng"
         },
         "about": {
             "title": "Giới thiệu",
@@ -368,6 +433,13 @@
             "warning_key": "Lưu ý: Giữ API key của bạn an toàn. Đừng chia sẻ nó.",
             "api_key_invalid": "Định dạng khóa API không hợp lệ, phải bắt đầu bằng sk- và có ít nhất 10 ký tự",
             "api_key_updated": "Đã cập nhật khóa API",
+            "admin_password": "Mật khẩu quản trị Web UI",
+            "admin_password_tooltip": "Mật khẩu dùng để đăng nhập vào bảng điều khiển quản lý Web. Nếu để trống, API Key sẽ được sử dụng theo mặc định.",
+            "admin_password_default": "(Giống với API Key)",
+            "admin_password_placeholder": "Nhập mật khẩu mới, để trống để dùng API Key",
+            "admin_password_hint": "Mẹo: Trong các kịch bản triển khai Docker/Web, bạn có thể thiết lập mật khẩu đăng nhập riêng để tăng cường tính bảo mật cho API Key.",
+            "admin_password_short": "Mật khẩu quá ngắn (tối thiểu 4 ký tự)",
+            "admin_password_updated": "Mật khẩu đăng nhập Web UI đã được cập nhật",
             "auth": {
                 "title": "Xác thực (Authorization)",
                 "title_tooltip": "Kiểm soát xem request đến có cần xác thực hay không, và route nào được bảo vệ.",
@@ -415,10 +487,10 @@
                     "advanced_tooltip": "Ghi đè khớp chính xác tùy chọn. Nếu tên model đầu vào khớp chính xác với khóa quy tắc, nó sẽ được thay thế bằng model z.ai được ánh xạ.",
                     "from_label": "Model đầu vào",
                     "to_label": "Model z.ai",
-                    "from_placeholder": "ví dụ: claude-opus-4-5-thinking",
-                    "to_placeholder": "ví dụ: glm-4.7",
                     "add_rule": "Thêm",
-                    "empty": "Chưa có quy tắc ghi đè nào."
+                    "empty": "Chưa có quy tắc ghi đè nào.",
+                    "from_placeholder": "Ví dụ: claude-3-opus",
+                    "to_placeholder": "Ví dụ: glm-4"
                 },
                 "modes": {
                     "off": "Tắt",
@@ -443,7 +515,7 @@
             },
             "request_timeout": "Timeout Request",
             "request_timeout_tooltip": "Thời gian tối đa (giây) proxy chờ phản hồi từ upstream, bao gồm cả streaming. Tăng lên nếu tạo nội dung dài; cần khởi động lại để áp dụng.",
-            "request_timeout_hint": "Mặc định 120s, khoảng 30-3600s. Khởi động lại dịch vụ để áp dụng.",
+            "request_timeout_hint": "Mặc định 120s, khoảng 30-7200s. Khởi động lại dịch vụ để áp dụng.",
             "enable_logging": "Bật Ghi Log Request",
             "enable_logging_hint": "Ghi lại lịch sử để debug (Ảnh hưởng nhẹ hiệu năng)",
             "upstream_proxy": {
@@ -452,7 +524,9 @@
                 "enable": "Bật Upstream Proxy",
                 "url": "URL Proxy",
                 "url_placeholder": "ví dụ: http://127.0.0.1:7890 hoặc socks5://127.0.0.1:7890",
-                "tip": "Hỗ trợ HTTP, HTTPS và SOCKS5."
+                "tip": "Hỗ trợ HTTP, HTTPS và SOCKS5.",
+                "validation_error": "URL proxy là bắt buộc khi bật upstream proxy",
+                "restart_hint": "Cài đặt proxy đã lưu. Khởi động lại ứng dụng để áp dụng thay đổi."
             },
             "scheduling": {
                 "title": "Điều phối & Xoay vòng Tài khoản",
@@ -472,13 +546,78 @@
                 "max_wait": "Chờ Tối đa (giây)",
                 "max_wait_tooltip": "Chỉ dùng trong chế độ 'Ưu tiên Cache': chờ thay vì đổi tài khoản nếu thời gian reset rate limit thấp hơn giá trị này.",
                 "clear_bindings": "Xóa liên kết phiên",
-                "clear_bindings_tooltip": "Ngắt ngay lập tức tất cả các mối quan hệ liên kết giữa phiên và tài khoản, buộc lần yêu cầu tiếp theo phải phân bổ lại tài khoản."
+                "fixed_account": "Chế độ Tài khoản Cố định",
+                "fixed_account_tooltip": "Khi được bật, tất cả các yêu cầu API sẽ chỉ sử dụng tài khoản đã chọn thay vì luân phiên giữa các tài khoản.",
+                "round_robin_set": "Chế độ luân phiên đã bật",
+                "fixed_account_set": "Chế độ tài khoản cố định đã bật",
+                "account_changed": "Tài khoản đã thay đổi thành: {{email}}",
+                "clear_bindings_tooltip": "Ngắt ngay lập tức tất cả các mối quan hệ liên kết giữa phiên và tài khoản, buộc lần yêu cầu tiếp theo phải phân bổ lại tài khoản.",
+                "circuit_breaker": {
+                    "title": "Bộ ngắt mạch thích ứng",
+                    "tooltip": "Tự động tăng thời gian khóa cho các tài khoản liên tục thất bại do cạn kiệt hạn ngạch. Điều này ngăn chặn việc lãng phí các cuộc gọi API trên các tài khoản đã chết trong khi cho phép các lỗi tạm thời phục hồi nhanh chóng.",
+                    "backoff_levels": "Cấp độ lùi (Giây)",
+                    "level": "Cấp {{level}}",
+                    "input_placeholder": "60, 300, 1800, 7200",
+                    "invalid_format": "Định dạng không hợp lệ. Sử dụng các số cách nhau bởi dấu phẩy (ví dụ: 60, 300)",
+                    "clear_records": "Xóa tất cả hồ sơ giới hạn tốc độ"
+                }
             },
             "experimental": {
                 "title": "Cài đặt thử nghiệm",
                 "title_tooltip": "Các tính năng mang tính khám phá, có thể được điều chỉnh hoặc loại bỏ trong các phiên bản tương lai.",
                 "enable_usage_scaling": "Bật thu phóng dữ liệu sử dụng",
-                "enable_usage_scaling_tooltip": "Dành cho giao thức tương thích với Claude. Khi tổng đầu vào vượt quá 30k Token, hãy bật tính năng thu phóng linh hoạt để ngăn việc kích hoạt nén phía máy khách thường xuyên trong ngữ cảnh lớn. Lưu ý: Sau khi bật, lượng dữ liệu sử dụng hiển thị trên máy khách sẽ không còn đại diện cho điểm thanh toán thực tế."
+                "enable_usage_scaling_tooltip": "Dành cho giao thức tương thích với Claude. Khi tổng đầu vào vượt quá 30k Token, hãy bật tính năng thu phóng linh hoạt để ngăn việc kích hoạt nén phía máy khách thường xuyên trong ngữ cảnh lớn. Lưu ý: Sau khi bật, lượng dữ liệu sử dụng hiển thị trên máy khách sẽ không còn đại diện cho điểm thanh toán thực tế.",
+                "context_compression_threshold_l1": "Ngưỡng nén L1 (Cắt tỉa công cụ)",
+                "context_compression_threshold_l1_tooltip": "Cắt tỉa lịch sử gọi công cụ cũ để tiết kiệm không gian. Khuyên dùng: 0.4 (40%)",
+                "context_compression_threshold_l2": "Ngưỡng nén L2 (Nén tư duy)",
+                "context_compression_threshold_l2_tooltip": "Nén các khối tư duy sớm trong khi vẫn giữ chữ ký. Khuyên dùng: 0.55 (55%)",
+                "context_compression_threshold_l3": "Ngưỡng nén L3 (Đặt lại tóm tắt)",
+                "context_compression_threshold_l3_tooltip": "Tạo bản tóm tắt trạng thái XML và chuyển sang phiên họp mới. Khuyên dùng: 0.7 (70%)"
+            },
+            "cloudflared": {
+                "title": "Truy cập Công khai (Cloudflared)",
+                "subtitle": "Phơi bày dịch vụ cục bộ ra internet qua Cloudflare Tunnel",
+                "not_installed": "Cloudflared chưa được cài đặt",
+                "install_hint": "Cloudflared là công cụ tunnel miễn phí từ Cloudflare. Nó phơi bày proxy cục bộ của bạn ra internet mà không cần IP công khai hoặc chuyển tiếp cổng. Nhấp vào nút bên dưới để cài đặt.",
+                "install": "Cài đặt Ngay",
+                "installing": "Đang cài đặt...",
+                "install_success": "Đã cài đặt Cloudflared thành công",
+                "install_failed": "Cài đặt thất bại: {{error}}",
+                "installed": "Đã cài đặt",
+                "version": "Phiên bản",
+                "mode_label": "Chế độ Tunnel",
+                "mode_quick": "Tunnel Nhanh",
+                "mode_quick_desc": "URL tạm thời tự động tạo (*.trycloudflare.com), không cần tài khoản, URL thay đổi khi khởi động lại",
+                "mode_auth": "Tunnel Có tên",
+                "mode_auth_desc": "Sử dụng token tài khoản Cloudflare, hỗ trợ domain tùy chỉnh, URL vĩnh viễn",
+                "token": "Token Tunnel",
+                "token_placeholder": "Dán Cloudflare Tunnel Token của bạn vào đây",
+                "token_hint": "Lấy từ bảng điều khiển Cloudflare Zero Trust",
+                "token_required": "Token là bắt buộc cho chế độ Tunnel Có tên",
+                "use_http2": "Sử dụng HTTP/2",
+                "use_http2_desc": "Tương thích hơn, được khuyến nghị cho Trung Quốc đại lục",
+                "status_label": "Trạng thái Tunnel",
+                "status_stopped": "Đã dừng",
+                "status_starting": "Đang khởi động...",
+                "status_running": "Đang chạy",
+                "status_error": "Lỗi",
+                "public_url": "URL Công khai",
+                "public_url_copied": "Đã sao chép URL",
+                "start_tunnel": "Khởi động Tunnel",
+                "stop_tunnel": "Dừng Tunnel",
+                "restart_tunnel": "Khởi động lại Tunnel",
+                "starting": "Đang khởi động...",
+                "stopping": "Đang dừng...",
+                "start_success": "Tunnel đã khởi động thành công",
+                "stop_success": "Tunnel đã dừng",
+                "start_failed": "Khởi động tunnel thất bại: {{error}}",
+                "stop_failed": "Dừng tunnel thất bại: {{error}}",
+                "logs": "Nhật ký",
+                "clear_logs": "Xóa Nhật ký",
+                "auto_start": "Tự động khởi động cùng proxy",
+                "auto_start_desc": "Tự động khởi động tunnel khi dịch vụ API Proxy khởi động",
+                "warning_quick_mode": "⚠️ Chế độ Nhanh: URL thay đổi mỗi lần khởi động lại",
+                "warning_token_storage": "💡 Token được lưu trữ an toàn cục bộ"
             }
         },
         "example": {
@@ -546,6 +685,10 @@
             "title": "Bộ Định tuyến Model (Router)",
             "subtitle": "Định tuyến model theo nhóm (Series) hoặc thêm ánh xạ chính xác.\nLưu ý: Các native model Claude (ví dụ: claude-opus-4-5-thinking) mặc định sẽ bỏ qua nhóm series và đi thẳng. Dùng \"Định tuyến Tùy chỉnh Cao cấp\" để ghi đè.",
             "subtitle_simple": "Tùy chỉnh định tuyến model với ký tự đại diện hoặc ánh xạ chính xác",
+            "background_task_title": "Background Task Model",
+            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
+            "use_default": "Use System Default",
+            "current_model": "Current Model",
             "apply_presets": "Áp dụng Cài sẵn",
             "presets_applied": "Đã áp dụng cài đặt sẵn thành công",
             "custom_mappings": "Ánh xạ Tùy chỉnh",
@@ -594,20 +737,52 @@
             "default_suffix": " (Mặc định)",
             "original_id": "ID Gốc",
             "route_to": "Điều hướng tới",
-            "select_target_model": "Chọn Model Đích"
+            "select_target_model": "Chọn Model Đích",
+            "original_placeholder": "Gốc (ví dụ: gpt-4 hoặc gpt-4*)"
         },
         "multi_protocol": {
-            "title": "Hỗ trợ Đa Giao thức",
-            "subtitle": "Hỗ trợ Giao thức",
-            "description": "Dịch vụ Proxy hỗ trợ cả định dạng API OpenAI và Anthropic để đáp ứng các nhu cầu công cụ khác nhau",
-            "openai_label": "Giao thức OpenAI",
-            "anthropic_label": "Giao thức Anthropic",
+            "title": "Hỗ trợ đa giao thức",
+            "subtitle": "Đồng bộ API và Key với công cụ của bạn",
+            "description": "Proxy hỗ trợ các giao thức OpenAI, Anthropic và Gemini để dễ dàng tích hợp.",
+            "openai_label": "OpenAI",
+            "anthropic_label": "Anthropic",
             "openai_tools": "Cherry Studio, NextChat",
             "anthropic_tools": "Claude Code CLI",
-            "gemini_label": "Giao thức Gemini",
+            "gemini_label": "Gemini",
             "gemini_tools": "Google AI SDK, LangChain",
-            "quick_integration": "Tích hợp Nhanh",
-            "click_tip": "👆 Click vào bất kỳ model nào bên trái để cập nhật mã mẫu này."
+            "quick_integration": "Tích hợp nhanh",
+            "click_tip": "👆 Click vào model để cập nhật mã mẫu",
+            "copy_base": "Sao chép Base"
+        },
+        "cli_sync": {
+            "title": "Đồng bộ CLI",
+            "subtitle": "Đồng bộ URL API và Key hiện tại với các công cụ AI CLI của bạn",
+            "card_title": "Cấu hình {{name}}",
+            "status": {
+                "not_installed": "Chưa cài đặt",
+                "installed": "v{{version}}",
+                "synced": "Đã trỏ đến app này",
+                "not_synced": "Chưa đồng bộ",
+                "detecting": "Đang kiểm tra...",
+                "current_base_url": "Base URL hiện tại"
+            },
+            "btn_sync": "Đồng bộ ngay",
+            "btn_view": "Xem cấu hình",
+            "btn_restore": "Khôi phục",
+            "btn_restore_backup": "Khôi phục bản sao lưu",
+            "restore_backup_confirm": "Tìm thấy cấu hình sao lưu. Bạn có chắc chắn muốn khôi phục không?",
+            "sync_confirm_title": "Xác nhận đồng bộ",
+            "sync_confirm_message": "Đã sẵn sàng đồng bộ cấu hình {{name}}. ⚠️ Cảnh báo: Thao tác này sẽ ghi đè các tệp cấu hình cục bộ hiện có của bạn (ví dụ: token đăng nhập, API Key). Bạn có chắc chắn muốn tiếp tục không?",
+            "restore_confirm": "Bạn có chắc muốn khôi phục cấu hình {{name}} về mặc định không?",
+            "modal": {
+                "view_title": "Nội dung cấu hình {{name}}",
+                "copy_success": "Đã sao chép vào bộ nhớ tạm"
+            },
+            "toast": {
+                "config_missing": "Vui lòng tạo API Key và khởi chạy dịch vụ trước",
+                "sync_success": "Thành công! {{name}} đã sẵn sàng.",
+                "sync_error": "Lỗi đồng bộ {{name}}: {{error}}"
+            }
         },
         "supported_models": {
             "title": "Model Hỗ trợ & Tích hợp",
@@ -639,12 +814,15 @@
             "gemini": "Gemini",
             "claude": "Claude",
             "images": "Ảnh",
-            "reset": "Đặt lại"
+            "reset": "Đặt lại",
+            "by_account": "Lọc theo tài khoản",
+            "all_accounts": "Tất cả tài khoản"
         },
         "table": {
             "status": "Trạng thái",
             "method": "Method",
             "model": "Model",
+            "protocol": "Giao thức",
             "account": "Tài khoản",
             "path": "Đường dẫn (Path)",
             "usage": "Tokens",
@@ -657,14 +835,79 @@
             "request_payload": "Payload Yêu cầu",
             "response_payload": "Payload Phản hồi",
             "duration": "Thời gian xử lý",
+            "token_stats": "Token Stats",
             "tokens": "Tokens (I/O)",
             "time": "Thời điểm",
             "model": "Model",
-            "id": "Request ID"
+            "id": "Request ID",
+            "protocol": "Giao thức",
+            "mapped_model": "Model Đã Ánh xạ",
+            "account_used": "Tài khoản Sử dụng",
+            "payload_empty": "Không có Payload"
+        },
+        "token_stats": {
+            "title": "Token Usage Stats",
+            "hourly": "Hourly",
+            "daily": "Daily",
+            "weekly": "Weekly",
+            "total_tokens": "Total Tokens",
+            "input_tokens": "Input Tokens",
+            "output_tokens": "Output Tokens",
+            "accounts_used": "Active Accounts",
+            "usage_trend": "Usage Trend",
+            "by_account": "Stats by Account",
+            "account_details": "Account Details",
+            "account": "Account",
+            "requests": "Requests",
+            "input": "Input",
+            "output": "Output",
+            "total": "Total",
+            "no_data": "No Data"
         },
         "dialog": {
             "clear_title": "Xóa Logs Proxy",
             "clear_msg": "Bạn có chắc muốn xóa tất cả logs proxy? Hành động này không thể hoàn tác."
         }
+    },
+    "update_notification": {
+        "title": "Có phiên bản mới",
+        "message": "Có phiên bản mới với các tối ưu hóa và cải thiện. Hiện tại: v{{current}}",
+        "action": "Cập nhật ngay"
+    },
+    "login": {
+        "title": "Kiểm soát truy cập an toàn",
+        "desc": "Hiện đang chạy ở chế độ Web. Vui lòng nhập mật khẩu quản trị hoặc API Key để truy cập.",
+        "placeholder": "Nhập mật khẩu quản trị hoặc API Key",
+        "btn_login": "Xác minh và Vào",
+        "note": "Lưu ý: Nếu đã thiết lập mật khẩu quản trị riêng, vui lòng nhập mật khẩu đó; nếu không, hãy nhập API_KEY.",
+        "lookup_hint": "Nếu quên, hãy chạy lệnh docker logs antigravity-manager để tìm API Key hiện tại hoặc Mật khẩu Web UI.",
+        "config_hint": "Hoặc chạy lệnh grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json để xem."
+    },
+    "token_stats": {
+        "title": "Thống kê Token",
+        "hourly": "Hàng giờ",
+        "daily": "Hàng ngày",
+        "weekly": "Hàng tuần",
+        "total_tokens": "Tổng Token",
+        "input_tokens": "Token đầu vào",
+        "output_tokens": "Token đầu ra",
+        "accounts_used": "Tài khoản hoạt động",
+        "models_used": "Model đã dùng",
+        "model_trend": "Xu hướng sử dụng theo Model",
+        "account_trend": "Xu hướng sử dụng theo tài khoản",
+        "usage_trend": "Xu hướng sử dụng Token",
+        "by_account": "Theo tài khoản",
+        "by_model": "Theo mô hình",
+        "by_account_view": "Theo tài khoản",
+        "model_details": "Chi tiết theo Model",
+        "account_details": "Chi tiết theo tài khoản",
+        "model": "Model",
+        "account": "Tài khoản",
+        "requests": "Số yêu cầu",
+        "input": "Đầu vào",
+        "output": "Đầu ra",
+        "total": "Tổng",
+        "percentage": "Tỷ lệ",
+        "no_data": "Không có dữ liệu"
     }
 }

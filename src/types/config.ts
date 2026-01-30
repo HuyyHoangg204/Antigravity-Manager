@@ -9,14 +9,21 @@ export interface ProxyConfig {
     auth_mode?: 'off' | 'strict' | 'all_except_health' | 'auto';
     port: number;
     api_key: string;
+    admin_password?: string;
     auto_start: boolean;
     custom_mapping?: Record<string, string>;
     request_timeout: number;
     enable_logging: boolean;
+    debug_logging?: DebugLoggingConfig;
     upstream_proxy: UpstreamProxyConfig;
     zai?: ZaiConfig;
     scheduling?: StickySessionConfig;
     experimental?: ExperimentalConfig;
+}
+
+export interface DebugLoggingConfig {
+    enabled: boolean;
+    output_dir?: string;
 }
 
 export type SchedulingMode = 'CacheFirst' | 'Balance' | 'PerformanceFirst';
@@ -62,8 +69,20 @@ export interface QuotaProtectionConfig {
     monitored_models: string[];
 }
 
+export interface PinnedQuotaModelsConfig {
+    models: string[];
+}
+
 export interface ExperimentalConfig {
     enable_usage_scaling: boolean;
+    context_compression_threshold_l1?: number;
+    context_compression_threshold_l2?: number;
+    context_compression_threshold_l3?: number;
+}
+
+export interface CircuitBreakerConfig {
+    enabled: boolean;
+    backoff_steps: number[];
 }
 
 export interface AppConfig {
@@ -82,6 +101,29 @@ export interface AppConfig {
     accounts_page_size?: number; // 账号列表每页显示数量,默认 0 表示自动计算
     scheduled_warmup: ScheduledWarmupConfig;
     quota_protection: QuotaProtectionConfig; // [NEW] 配额保护配置
+    pinned_quota_models: PinnedQuotaModelsConfig; // [NEW] 配额关注列表
+    circuit_breaker: CircuitBreakerConfig; // [NEW] 熔断器配置
     proxy: ProxyConfig;
 }
 
+// ============================================================================
+// Cloudflared (CF隧道) 类型定义
+// ============================================================================
+
+export type TunnelMode = 'quick' | 'auth';
+
+export interface CloudflaredConfig {
+    enabled: boolean;
+    mode: TunnelMode;
+    port: number;
+    token?: string;
+    use_http2: boolean;
+}
+
+export interface CloudflaredStatus {
+    installed: boolean;
+    version?: string;
+    running: boolean;
+    url?: string;
+    error?: string;
+}

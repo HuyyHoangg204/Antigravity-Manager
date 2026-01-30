@@ -12,17 +12,17 @@ const DATA_DIR: &str = ".antigravity_tools";
 const GLOBAL_BASELINE: &str = "device_original.json";
 
 fn get_data_dir() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("无法获取用户主目录")?;
+    let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
     let data_dir = home.join(DATA_DIR);
     if !data_dir.exists() {
-        fs::create_dir_all(&data_dir).map_err(|e| format!("创建数据目录失败: {}", e))?;
+        fs::create_dir_all(&data_dir).map_err(|e| format!("failed_to_create_data_dir: {}", e))?;
     }
     Ok(data_dir)
 }
 
-/// 寻找 storage.json 路径（优先自定义/便携路径）
+/// Find storage.json path (prefer custom/portable paths)
 pub fn get_storage_path() -> Result<PathBuf, String> {
-    // 1) --user-data-dir 参数
+    // 1) --user-data-dir flag
     if let Some(user_data_dir) = process::get_user_data_dir_from_process() {
         let path = user_data_dir
             .join("User")
@@ -33,7 +33,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
         }
     }
 
-    // 2) 便携模式（基于可执行文件的 data/user-data）
+    // 2) Portable mode (based on executable data/user-data)
     if let Some(exe_path) = process::get_antigravity_executable_path() {
         if let Some(parent) = exe_path.parent() {
             let portable = parent
@@ -48,10 +48,10 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
         }
     }
 
-    // 3) 标准安装位置
+    // 3) Standard installation location
     #[cfg(target_os = "macos")]
     {
-        let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+        let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
         let path =
             home.join("Library/Application Support/Antigravity/User/globalStorage/storage.json");
         if path.exists() {
@@ -62,7 +62,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
+            std::env::var("APPDATA").map_err(|_| "failed_to_get_appdata_env".to_string())?;
         let path = PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\storage.json");
         if path.exists() {
             return Ok(path);
@@ -71,56 +71,56 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
 
     #[cfg(target_os = "linux")]
     {
-        let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+        let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
         let path = home.join(".config/Antigravity/User/globalStorage/storage.json");
         if path.exists() {
             return Ok(path);
         }
     }
 
-    Err("未找到 storage.json，请确认 Antigravity 已运行过并生成配置文件".to_string())
+    Err("storage_json_not_found".to_string())
 }
 
-/// 获取 storage.json 所在目录
+/// Get directory of storage.json
 pub fn get_storage_dir() -> Result<PathBuf, String> {
     let path = get_storage_path()?;
     path.parent()
         .map(|p| p.to_path_buf())
-        .ok_or_else(|| "无法获取 storage.json 所在目录".to_string())
+        .ok_or_else(|| "failed_to_get_storage_parent_dir".to_string())
 }
 
-/// 获取 state.vscdb 路径（与 storage.json 同目录）
+/// Get state.vscdb path (same directory as storage.json)
 pub fn get_state_db_path() -> Result<PathBuf, String> {
     let dir = get_storage_dir()?;
     Ok(dir.join("state.vscdb"))
 }
 
-/// 备份 storage.json，返回备份文件路径
+/// Backup storage.json, returns backup file path
 #[allow(dead_code)]
 pub fn backup_storage(storage_path: &Path) -> Result<PathBuf, String> {
     if !storage_path.exists() {
-        return Err(format!("storage.json 不存在: {:?}", storage_path));
+        return Err(format!("storage_json_missing: {:?}", storage_path));
     }
     let dir = storage_path
         .parent()
-        .ok_or_else(|| "无法获取 storage.json 的父目录".to_string())?;
+        .ok_or_else(|| "failed_to_get_storage_parent_dir".to_string())?;
     let backup_path = dir.join(format!(
         "storage.json.backup_{}",
         Local::now().format("%Y%m%d_%H%M%S")
     ));
-    fs::copy(storage_path, &backup_path).map_err(|e| format!("备份 storage.json 失败: {}", e))?;
+    fs::copy(storage_path, &backup_path).map_err(|e| format!("backup_failed: {}", e))?;
     Ok(backup_path)
 }
 
-/// 从 storage.json 读取当前设备指纹
+/// Read current device profile from storage.json
 #[allow(dead_code)]
 pub fn read_profile(storage_path: &Path) -> Result<DeviceProfile, String> {
     let content =
-        fs::read_to_string(storage_path).map_err(|e| format!("读取 storage.json 失败: {}", e))?;
+        fs::read_to_string(storage_path).map_err(|e| format!("read_failed ({:?}): {}", storage_path, e))?;
     let json: Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析 storage.json 失败: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("parse_failed ({:?}): {}", storage_path, e))?;
 
-    // 支持嵌套 telemetry 或扁平 telemetry.xxx
+    // Supports nested telemetry or flat telemetry.xxx
     let get_field = |key: &str| -> Option<String> {
         if let Some(obj) = json.get("telemetry").and_then(|v| v.as_object()) {
             if let Some(v) = obj.get(key).and_then(|v| v.as_str()) {
@@ -137,30 +137,30 @@ pub fn read_profile(storage_path: &Path) -> Result<DeviceProfile, String> {
     };
 
     Ok(DeviceProfile {
-        machine_id: get_field("machineId").ok_or("缺少 telemetry.machineId")?,
-        mac_machine_id: get_field("macMachineId").ok_or("缺少 telemetry.macMachineId")?,
-        dev_device_id: get_field("devDeviceId").ok_or("缺少 telemetry.devDeviceId")?,
-        sqm_id: get_field("sqmId").ok_or("缺少 telemetry.sqmId")?,
+        machine_id: get_field("machineId").ok_or("missing_machine_id")?,
+        mac_machine_id: get_field("macMachineId").ok_or("missing_mac_machine_id")?,
+        dev_device_id: get_field("devDeviceId").ok_or("missing_dev_device_id")?,
+        sqm_id: get_field("sqmId").ok_or("missing_sqm_id")?,
     })
 }
 
-/// 将设备指纹写入 storage.json
+/// Write device profile to storage.json
 pub fn write_profile(storage_path: &Path, profile: &DeviceProfile) -> Result<(), String> {
     if !storage_path.exists() {
-        return Err(format!("storage.json 不存在: {:?}", storage_path));
+        return Err(format!("storage_json_missing: {:?}", storage_path));
     }
 
     let content =
-        fs::read_to_string(storage_path).map_err(|e| format!("读取 storage.json 失败: {}", e))?;
+        fs::read_to_string(storage_path).map_err(|e| format!("read_failed: {}", e))?;
     let mut json: Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析 storage.json 失败: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("parse_failed: {}", e))?;
 
-    // 确保 telemetry 是对象
+    // Ensure telemetry is an object
     if !json.get("telemetry").map_or(false, |v| v.is_object()) {
         if json.as_object_mut().is_some() {
             json["telemetry"] = serde_json::json!({});
         } else {
-            return Err("storage.json 顶层不是对象，无法写入 telemetry".to_string());
+            return Err("json_top_level_not_object".to_string());
         }
     }
 
@@ -179,10 +179,10 @@ pub fn write_profile(storage_path: &Path, profile: &DeviceProfile) -> Result<(),
         );
         telemetry.insert("sqmId".to_string(), Value::String(profile.sqm_id.clone()));
     } else {
-        return Err("telemetry 字段不是对象，写入失败".to_string());
+        return Err("telemetry_not_object".to_string());
     }
 
-    // 同时写入扁平键，兼容旧格式
+    // Write flat keys as well, compatible with old formats
     if let Some(map) = json.as_object_mut() {
         map.insert(
             "telemetry.machineId".to_string(),
@@ -202,7 +202,7 @@ pub fn write_profile(storage_path: &Path, profile: &DeviceProfile) -> Result<(),
         );
     }
 
-    // 同步 storage.serviceMachineId（与 devDeviceId 一致），放在根级别
+    // Sync storage.serviceMachineId (match with devDeviceId), place at root level
     if let Some(map) = json.as_object_mut() {
         map.insert(
             "storage.serviceMachineId".to_string(),
@@ -211,22 +211,22 @@ pub fn write_profile(storage_path: &Path, profile: &DeviceProfile) -> Result<(),
     }
 
     let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("序列化 storage.json 失败: {}", e))?;
-    fs::write(storage_path, updated).map_err(|e| format!("写入 storage.json 失败: {}", e))?;
-    logger::log_info("已写入设备指纹到 storage.json");
+        .map_err(|e| format!("serialize_failed: {}", e))?;
+    fs::write(storage_path, updated).map_err(|e| format!("write_failed ({:?}): {}", storage_path, e))?;
+    logger::log_info(&format!("device_profile_written to {:?}", storage_path));
 
-    // 同步 state.vscdb 的 ItemTable.storage.serviceMachineId
+    // Sync ItemTable.storage.serviceMachineId in state.vscdb
     let _ = sync_state_service_machine_id_value(&profile.dev_device_id);
     Ok(())
 }
 
-/// 仅补充/同步 serviceMachineId，不改动其他字段
+/// Only sync serviceMachineId, don't change other fields
 #[allow(dead_code)]
 pub fn sync_service_machine_id(storage_path: &Path, service_id: &str) -> Result<(), String> {
     let content =
-        fs::read_to_string(storage_path).map_err(|e| format!("读取 storage.json 失败: {}", e))?;
+        fs::read_to_string(storage_path).map_err(|e| format!("read_failed: {}", e))?;
     let mut json: Value =
-        serde_json::from_str(&content).map_err(|e| format!("解析 storage.json 失败: {}", e))?;
+        serde_json::from_str(&content).map_err(|e| format!("parse_failed: {}", e))?;
 
     if let Some(map) = json.as_object_mut() {
         map.insert(
@@ -236,22 +236,22 @@ pub fn sync_service_machine_id(storage_path: &Path, service_id: &str) -> Result<
     }
 
     let updated = serde_json::to_string_pretty(&json)
-        .map_err(|e| format!("序列化 storage.json 失败: {}", e))?;
-    fs::write(storage_path, updated).map_err(|e| format!("写入 storage.json 失败: {}", e))?;
-    logger::log_info("已同步 storage.serviceMachineId 到 storage.json");
+        .map_err(|e| format!("serialize_failed: {}", e))?;
+    fs::write(storage_path, updated).map_err(|e| format!("write_failed: {}", e))?;
+    logger::log_info("service_machine_id_synced");
 
     let _ = sync_state_service_machine_id_value(service_id);
     Ok(())
 }
 
-/// 从现有 storage.json 读取 serviceMachineId（无则用 telemetry.devDeviceId），回写缺失项并同步 state.vscdb
+/// Read serviceMachineId from storage.json (fallback to devDeviceId), sync back if missing and sync state.vscdb
 #[allow(dead_code)]
 pub fn sync_service_machine_id_from_storage(storage_path: &Path) -> Result<(), String> {
     if !storage_path.exists() {
-        return Err("storage.json 不存在，无法同步 serviceMachineId".to_string());
+        return Err("storage_json_missing".to_string());
     }
-    let content = fs::read_to_string(storage_path).map_err(|e| format!("读取 storage.json 失败: {}", e))?;
-    let mut json: Value = serde_json::from_str(&content).map_err(|e| format!("解析 storage.json 失败: {}", e))?;
+    let content = fs::read_to_string(storage_path).map_err(|e| format!("read_failed: {}", e))?;
+    let mut json: Value = serde_json::from_str(&content).map_err(|e| format!("parse_failed: {}", e))?;
 
     let service_id = json
         .get("storage.serviceMachineId")
@@ -268,7 +268,7 @@ pub fn sync_service_machine_id_from_storage(storage_path: &Path) -> Result<(), S
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
         })
-        .ok_or("storage.json 中缺少 storage.serviceMachineId 和 telemetry.devDeviceId")?;
+        .ok_or("missing_ids_in_storage")?;
 
     let mut dirty = false;
     if json
@@ -283,9 +283,9 @@ pub fn sync_service_machine_id_from_storage(storage_path: &Path) -> Result<(), S
     }
 
     if dirty {
-        let updated = serde_json::to_string_pretty(&json).map_err(|e| format!("序列化 storage.json 失败: {}", e))?;
-        fs::write(storage_path, updated).map_err(|e| format!("写入 storage.json 失败: {}", e))?;
-        logger::log_info("已补充 storage.serviceMachineId 到 storage.json");
+        let updated = serde_json::to_string_pretty(&json).map_err(|e| format!("serialize_failed: {}", e))?;
+        fs::write(storage_path, updated).map_err(|e| format!("write_failed: {}", e))?;
+        logger::log_info("service_machine_id_added");
     }
 
     sync_state_service_machine_id_value(&service_id)
@@ -295,28 +295,28 @@ fn sync_state_service_machine_id_value(service_id: &str) -> Result<(), String> {
     let db_path = get_state_db_path()?;
     if !db_path.exists() {
         logger::log_warn(&format!(
-            "state.vscdb 不存在，跳过 serviceMachineId 同步: {:?}",
+            "state_db_missing: {:?}",
             db_path
         ));
         return Ok(());
     }
 
-    let conn = Connection::open(&db_path).map_err(|e| format!("打开 state.vscdb 失败: {}", e))?;
+    let conn = Connection::open(&db_path).map_err(|e| format!("db_open_failed: {}", e))?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ItemTable (key TEXT PRIMARY KEY, value TEXT);",
         [],
     )
-    .map_err(|e| format!("创建 ItemTable 失败: {}", e))?;
+    .map_err(|e| format!("failed_to_create_item_table: {}", e))?;
     conn.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES ('storage.serviceMachineId', ?1);",
         [service_id],
     )
-    .map_err(|e| format!("写入 storage.serviceMachineId 失败: {}", e))?;
-    logger::log_info("已同步 storage.serviceMachineId 至 state.vscdb");
+    .map_err(|e| format!("failed_to_write_to_db: {}", e))?;
+    logger::log_info("service_machine_id_synced_to_db");
     Ok(())
 }
 
-/// 全局原始指纹（所有账号共享）的存取
+/// Load/Save global original profile (shared across all accounts)
 pub fn load_global_original() -> Option<DeviceProfile> {
     if let Ok(dir) = get_data_dir() {
         let path = dir.join(GLOBAL_BASELINE);
@@ -335,19 +335,19 @@ pub fn save_global_original(profile: &DeviceProfile) -> Result<(), String> {
     let dir = get_data_dir()?;
     let path = dir.join(GLOBAL_BASELINE);
     if path.exists() {
-        return Ok(()); // 已存在则不覆盖
+        return Ok(()); // already exists, don't overwrite
     }
     let content =
-        serde_json::to_string_pretty(profile).map_err(|e| format!("序列化原始指纹失败: {}", e))?;
-    fs::write(&path, content).map_err(|e| format!("写入原始指纹失败: {}", e))
+        serde_json::to_string_pretty(profile).map_err(|e| format!("serialize_failed: {}", e))?;
+    fs::write(&path, content).map_err(|e| format!("write_failed: {}", e))
 }
 
-/// 罗列当前目录下的 storage.json 备份（按时间降序）
+/// List storage.json backups in current directory (descending by time)
 #[allow(dead_code)]
 pub fn list_backups(storage_path: &Path) -> Result<Vec<PathBuf>, String> {
     let dir = storage_path
         .parent()
-        .ok_or_else(|| "无法获取 storage.json 的父目录".to_string())?;
+        .ok_or_else(|| "failed_to_get_storage_parent_dir".to_string())?;
     let mut backups = Vec::new();
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -359,7 +359,7 @@ pub fn list_backups(storage_path: &Path) -> Result<Vec<PathBuf>, String> {
             }
         }
     }
-    // 按修改时间排序（新到旧）
+    // Sort by modification time (new to old)
     backups.sort_by(|a, b| {
         let ma = fs::metadata(a).and_then(|m| m.modified()).ok();
         let mb = fs::metadata(b).and_then(|m| m.modified()).ok();
@@ -368,26 +368,26 @@ pub fn list_backups(storage_path: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(backups)
 }
 
-/// 将备份还原到 storage.json，优先 oldest=true 时用最早备份，否则用最新备份
+/// Restore backup to storage.json. If use_oldest=true, use oldest backup, else use latest.
 #[allow(dead_code)]
 pub fn restore_backup(storage_path: &Path, use_oldest: bool) -> Result<PathBuf, String> {
     let backups = list_backups(storage_path)?;
     if backups.is_empty() {
-        return Err("未找到任何 storage.json 备份".to_string());
+        return Err("no_backups_found".to_string());
     }
     let target = if use_oldest {
         backups.last().unwrap().clone()
     } else {
         backups.first().unwrap().clone()
     };
-    // 先备份当前
+    // backup current first
     let _ = backup_storage(storage_path)?;
-    fs::copy(&target, storage_path).map_err(|e| format!("恢复备份失败: {}", e))?;
-    logger::log_info(&format!("已恢复 storage.json: {:?}", target));
+    fs::copy(&target, storage_path).map_err(|e| format!("restore_failed: {}", e))?;
+    logger::log_info(&format!("storage_json_restored: {:?}", target));
     Ok(target)
 }
 
-/// 生成一组新的设备指纹（符合 Cursor/VSCode 风格）
+/// Generate a new set of device fingerprints (Cursor/VSCode style)
 pub fn generate_profile() -> DeviceProfile {
     DeviceProfile {
         machine_id: format!("auth0|user_{}", random_hex(32)),

@@ -1,7 +1,9 @@
 {
     "common": {
+        "empty": "Boş",
         "loading": "Yükleniyor...",
         "add": "Ekle",
+        "copy": "Kopyala",
         "action": "İşlem",
         "save": "Kaydet",
         "saved": "Başarıyla kaydedildi",
@@ -30,12 +32,15 @@
         "enabled": "Etkin",
         "disabled": "Devre Dışı",
         "tauri_api_not_loaded": "Tauri API yüklenemedi, lütfen uygulamayı yeniden başlatın",
-        "environment_error": "Ortam hatası: {{error}}"
+        "environment_error": "Ortam hatası: {{error}}",
+        "submit": "Gönder"
     },
     "nav": {
         "dashboard": "Kontrol Paneli",
         "accounts": "Hesaplar",
         "proxy": "API Proxy",
+        "token_stats": "İstatistikler",
+        "call_records": "Trafik Günlükleri",
         "settings": "Ayarlar",
         "theme_to_dark": "Karanlık Moda Geç",
         "theme_to_light": "Aydınlık Moda Geç",
@@ -48,7 +53,11 @@
         "switch_to_turkish": "Türkçe'ye Geç",
         "switch_to_turkish_short": "TR",
         "switch_to_vietnamese": "Vietnamca'ya Geç",
-        "switch_to_vietnamese_short": "VI"
+        "switch_to_vietnamese_short": "VI",
+        "switch_to_russian": "Rusça'ya Geç",
+        "switch_to_russian_short": "RU",
+        "switch_to_portuguese": "Portekizce'ye Geç",
+        "switch_to_portuguese_short": "PT"
     },
     "dashboard": {
         "hello": "Merhaba, Kullanıcı 👋",
@@ -117,6 +126,46 @@
         "reset_time": "Sıfırlama Zamanı",
         "switch_to": "Bu hesaba geç",
         "actions": "İşlemler",
+        "device_fingerprint": "Cihaz Parmak İzi",
+        "device_fingerprint_dialog": {
+            "title": "Cihaz Parmak İzi",
+            "operations": "Cihaz Parmak İzi İşlemleri",
+            "generate_and_bind": "Oluştur ve Bağla",
+            "restore_original": "Orijinali Geri Yükle",
+            "open_storage_directory": "Depolama Dizini Aç",
+            "current_storage": "Mevcut Depolama",
+            "effective": "Etkin",
+            "current_storage_desc": "storage.json'den oku (hesap değiştirirken bağlama uygulandıktan sonra güncellenir)",
+            "account_binding": "Hesap Bağlama",
+            "pending_application": "Uygulama Bekliyor",
+            "account_binding_desc": "Oluşturma/geri yükleme sonrasında bağlama olarak kaydedilir, hesap değiştirirken storage.json'e yazılır",
+            "historical_fingerprints": "Geçmiş Parmak İzleri (isteğe bağlı geri yükle/sil)",
+            "no_history": "Geçmiş Yok",
+            "current": "Mevcut",
+            "restore": "Geri Yükle",
+            "delete_version": "Bu sürümü sil",
+            "confirm_generate_title": "Oluşturup bağlamak istediğinize emin misiniz?",
+            "confirm_generate_desc": "Yeni bir cihaz parmak izi seti oluşturacak ve mevcut parmak izi olarak ayarlayacak. Devam etmek istediğinize emin misiniz?",
+            "confirm_restore_title": "Orijinal parmak izini geri yüklemek istediğinize emin misiniz?",
+            "confirm_restore_desc": "Orijinal parmak izini geri yükleyecek ve mevcut parmak izini üzerine yazacak. Devam etmek istediğinize emin misiniz?",
+            "cancel": "İptal",
+            "confirm": "Onayla",
+            "processing": "İşleniyor...",
+            "loading": "Yükleniyor...",
+            "failed_to_load_device_info": "Cihaz bilgileri yüklenemedi",
+            "generation_failed": "Oluşturma başarısız",
+            "binding_failed": "Bağlama başarısız",
+            "restoration_failed": "Geri yükleme başarısız",
+            "deletion_failed": "Silme başarısız",
+            "directory_open_failed": "Dizin açılamıyor",
+            "generated_and_bound": "Oluşturuldu ve bağlandı",
+            "restored": "Geri yüklendi",
+            "deleted": "Silindi",
+            "directory_opened": "Depolama dizini açıldı",
+            "original_fingerprint_not_found": "Orijinal parmak izi bulunamadı",
+            "storage_json_not_found": "storage.json bulunamadı, lütfen Antigravity'nin yapılandırma dosyasını oluşturmak için çalıştırıldığından emin olun"
+        },
+        "quota_protected": "Korumalı",
         "details": {
             "title": "Kota Detayları"
         },
@@ -140,7 +189,10 @@
                 "copy_link": "Yetkilendirme Bağlantısını Kopyala",
                 "copied": "Kopyalandı",
                 "link_label": "Yetkilendirme URL'si",
-                "link_click_to_copy": "Kopyalamak için tıklayın"
+                "link_click_to_copy": "Kopyalamak için tıklayın",
+                "manual_hint": "Tarayıcı otomatik olarak yönlendirilmedi mi? Lütfen geri dönüş bağlantısını veya Yetkilendirme Kodunu buraya yapıştırın:",
+                "manual_placeholder": "Bağlantıyı veya kodu buraya yapıştırın...",
+                "error_no_flow": "Aktif kimlik doğrulama akışı bulunamadı. Lütfen OAuth'u yeniden başlatın."
             },
             "token": {
                 "label": "Refresh Token",
@@ -230,6 +282,10 @@
             "auto_sync_desc": "Mevcut aktif hesap bilgilerini periyodik olarak otomatik senkronize et",
             "sync_interval": "Senkronizasyon Aralığı (saniye)"
         },
+        "pinned_quota_models": {
+            "title": "Sabitlenmiş Kota Modelleri",
+            "desc": "Hesap listesinde hangi model kotalarının görüntüleneceğini seçin. Seçilmeyen modeller yalnızca detay açılır penceresinde gösterilir"
+        },
         "proxy": {
             "title": "Proxy Ayarları"
         },
@@ -262,7 +318,17 @@
             "clear_logs": "Log Önbelleğini Temizle",
             "clear_logs_title": "Log Temizleme Onayı",
             "clear_logs_msg": "Tüm log önbellek dosyalarını temizlemek istediğinizden emin misiniz?",
-            "logs_cleared": "Log önbelleği temizlendi"
+            "logs_cleared": "Log önbelleği temizlendi",
+            "http_api_title": "HTTP API Servisi",
+            "http_api_desc": "Harici programlar (örn. VS Code eklentileri) için yerel HTTP arayüzü sağlar.",
+            "http_api_enabled": "HTTP API'yi Etkinleştir",
+            "http_api_enabled_desc": "Etkinleştirildiğinde, harici programlar HTTP arayüzü üzerinden hesapları yönetebilir",
+            "http_api_port": "Dinleme Portu",
+            "http_api_port_desc": "Port değiştirildikten sonra uygulamanın yeniden başlatılması gerekir. Port çakışması durumunda başka bir kullanılabilir port kullanın.",
+            "http_api_port_placeholder": "Varsayılan port 19527",
+            "http_api_port_invalid": "Geçersiz port numarası (aralık: 1024-65535)",
+            "http_api_settings_saved": "HTTP API ayarları kaydedildi, uygulamak için yeniden başlatma gerekli",
+            "http_api_restart_required": "⚠️ Uygulamak için yeniden başlatma gerekli"
         },
         "about": {
             "title": "Hakkında",
@@ -326,11 +392,20 @@
             "api_key": "API Anahtarı",
             "api_key_tooltip": "Proxy yetkilendirmesi etkinleştirildiğinde istemciler tarafından kullanılan paylaşılan gizli anahtar. Anahtarı yeniden oluşturmak eskisini hemen geçersiz kılar.",
             "btn_regenerate": "Anahtarı Yeniden Oluştur",
+            "btn_edit": "Düzenle",
+            "btn_save": "Kaydet",
             "btn_copy": "Kopyala",
             "btn_copied": "Kopyalandı",
             "warning_key": "Not: API anahtarınızı güvende tutun. Paylaşmayın.",
             "api_key_invalid": "Geçersiz API anahtarı formatı, sk- ile başlamalı ve en az 10 karakter uzunluğunda olmalıdır",
             "api_key_updated": "API anahtarı güncellendi",
+            "admin_password": "Web UI Yönetici Parolası",
+            "admin_password_tooltip": "Web yönetim konsolunda oturum açmak için kullanılan parola. Boş bırakılırsa varsayılan olarak API Anahtarı kullanılır.",
+            "admin_password_default": "(API Anahtarı ile aynı)",
+            "admin_password_placeholder": "Yeni parolanızı girin, API Anahtarı kullanmak için boş bırakın",
+            "admin_password_hint": "İpucu: Docker/Web dağıtım senaryolarında, API Anahtarınızın güvenliğini artırmak için ayrı bir oturum açma parolası ayarlayabilirsiniz.",
+            "admin_password_short": "Parola çok kısa (en az 4 karakter)",
+            "admin_password_updated": "Web UI oturum açma parolası güncellendi",
             "auth": {
                 "title": "Yetkilendirme",
                 "title_tooltip": "Gelen isteklerin kimlik doğrulamasının gerekli olup olmadığını ve hangi rotaların korunduğunu kontrol eder.",
@@ -364,8 +439,8 @@
                     "title": "Model Eşleme",
                     "title_tooltip": "Mevcut z.ai model kimliklerini alın ve gelen Anthropic/Claude model adlarının z.ai model kimliklerine nasıl çevrileceğini yapılandırın.",
                     "refresh": "Modelleri getir",
-            "btn_edit": "Düzenle",
-            "btn_save": "Kaydet",
+                    "btn_edit": "Düzenle",
+                    "btn_save": "Kaydet",
                     "refreshing": "Getiriliyor...",
                     "hint": "Kullanılabilir modeller: {{count}}. Bir öneri seçin veya özel model kimliği yazın.",
                     "error": "Modeller getirilemedi: {{error}}",
@@ -380,10 +455,10 @@
                     "advanced_tooltip": "İsteğe bağlı tam eşleşme geçersiz kılmaları. Gelen bir model dizesi bir kural anahtarıyla eşleşirse, eşlenen z.ai model kimliğiyle değiştirilir.",
                     "from_label": "Gelen model",
                     "to_label": "z.ai modeli",
-                    "from_placeholder": "örn. claude-opus-4-5-thinking",
-                    "to_placeholder": "örn. glm-4.7",
                     "add_rule": "Ekle",
-                    "empty": "Geçersiz kılma kuralı yapılandırılmadı."
+                    "empty": "Geçersiz kılma kuralı yapılandırılmadı.",
+                    "from_placeholder": "Örn: claude-3-opus",
+                    "to_placeholder": "Örn: glm-4"
                 },
                 "modes": {
                     "off": "Kapalı",
@@ -408,7 +483,7 @@
             },
             "request_timeout": "İstek Zaman Aşımı",
             "request_timeout_tooltip": "Proxy'nin streaming dahil upstream yanıtı için beklediği maksimum süre (saniye). Uzun üretimler için artırın; uygulamak için yeniden başlatma gerekir.",
-            "request_timeout_hint": "Varsayılan 120s, aralık 30-3600s. Değişiklikleri uygulamak için hizmeti yeniden başlatın.",
+            "request_timeout_hint": "Varsayılan 120s, aralık 30-7200s. Değişiklikleri uygulamak için hizmeti yeniden başlatın.",
             "enable_logging": "İstek Loglamayı Etkinleştir",
             "enable_logging_hint": "Hata ayıklama için geçmişi kaydet (Küçük performans maliyeti)",
             "upstream_proxy": {
@@ -417,7 +492,9 @@
                 "enable": "Upstream Proxy'yi Etkinleştir",
                 "url": "Proxy URL'si",
                 "url_placeholder": "örn. http://127.0.0.1:7890 veya socks5://127.0.0.1:7890",
-                "tip": "HTTP, HTTPS ve SOCKS5 destekler."
+                "tip": "HTTP, HTTPS ve SOCKS5 destekler.",
+                "validation_error": "Upstream proxy etkinleştirildiğinde proxy URL'si zorunludur",
+                "restart_hint": "Proxy ayarları kaydedildi. Değişiklikleri uygulamak için uygulamayı yeniden başlatın."
             },
             "scheduling": {
                 "title": "Hesap Rotasyonu ve Zamanlama",
@@ -438,13 +515,78 @@
                 "max_wait": "Maks Bekleme (sn)",
                 "max_wait_tooltip": "Yalnızca 'Önbellek Öncelikli' modunda kullanılır: oran limiti sıfırlama zamanı bu değerin altındaysa geçiş yapmak yerine bekle.",
                 "clear_bindings": "Oturum Bağlantılarını Temizle",
-                "clear_bindings_tooltip": "Tüm oturum ve hesap bağlantılarını hemen kesin, bir sonraki istekte hesapları yeniden atanmaya zorlayın."
+                "clear_bindings_tooltip": "Tüm oturum ve hesap bağlantılarını hemen kesin, bir sonraki istekte hesapları yeniden atanmaya zorlayın.",
+                "fixed_account": "Sabit Hesap Modu",
+                "fixed_account_tooltip": "Etkinleştirildiğinde, tüm API istekleri hesaplar arasında geçiş yapmak yerine yalnızca seçilen hesabı kullanacaktır.",
+                "round_robin_set": "Round-robin modu etkinleştirildi",
+                "fixed_account_set": "Sabit hesap modu etkinleştirildi",
+                "account_changed": "Hesap şuna değiştirildi: {{email}}",
+                "circuit_breaker": {
+                    "title": "Uyarlanabilir Devre Kesici",
+                    "tooltip": "Kota tükenmesi nedeniyle art arda başarısız olan hesaplar için kilitleme süresini otomatik olarak artırır. Bu, geçici hataların hızla düzelmesine izin verirken, ölü hesaplarda API çağrılarının boşa harcanmasını önler.",
+                    "backoff_levels": "Geri Çekilme Seviyeleri (Saniye)",
+                    "level": "Seviye {{level}}",
+                    "input_placeholder": "60, 300, 1800, 7200",
+                    "invalid_format": "Geçersiz format. Virgülle ayrılmış sayılar kullanın (örn. 60, 300)",
+                    "clear_records": "Tüm Hız Sınırı Kayıtlarını Temizle"
+                }
             },
             "experimental": {
                 "title": "Deneysel Ayarlar",
                 "title_tooltip": "Gelecek sürümlerde ayarlanabilecek veya kaldırılabilecek keşifsel özellikler.",
                 "enable_usage_scaling": "Kullanım Ölçeklendirmeyi Etkinleştir",
-                "enable_usage_scaling_tooltip": "Claude protokolü için. Toplam giriş 30 bin jetonu aştığında, büyük bağlamlarda sık istemci tarafı sıkıştırmayı önlemek için agresif ölçeklendirmeyi etkinleştirir. Not: Etkinleştirildikten sonra bildirilen kullanım gerçek faturalandırmayı yansıtmayacaktır."
+                "enable_usage_scaling_tooltip": "Claude protokolü için. Toplam giriş 30 bin jetonu aştığında, büyük bağlamlarda sık istemci tarafı sıkıştırmayı önlemek için agresif ölçeklendirmeyi etkinleştirir. Not: Etkinleştirildikten sonra bildirilen kullanım gerçek faturalandırmayı yansıtmayacaktır.",
+                "context_compression_threshold_l1": "L1 Sıkıştırma Eşiği (Araç Kırpma)",
+                "context_compression_threshold_l1_tooltip": "Yer kazanmak için eski araç çağrı kayıtlarını kırpar. Önerilen: 0.4 (40%)",
+                "context_compression_threshold_l2": "L2 Sıkıştırma Eşiği (Düşünce Sıkıştırma)",
+                "context_compression_threshold_l2_tooltip": "İmzaları korurken erken düşünce bloklarını sıkıştırır. Önerilen: 0.55 (55%)",
+                "context_compression_threshold_l3": "L3 Sıkıştırma Eşiği (Özet Pivotu)",
+                "context_compression_threshold_l3_tooltip": "XML durum özeti oluşturur ve taze bir oturuma geçer. Önerilen: 0.7 (70%)"
+            },
+            "cloudflared": {
+                "title": "Genel Erişim (Cloudflared)",
+                "subtitle": "Cloudflare Tunnel aracılığıyla yerel hizmetinizi internete açın",
+                "not_installed": "Cloudflared yüklü değil",
+                "install_hint": "Cloudflared, Cloudflare'in ücretsiz tünel aracıdır. Yerel proxy'nizi genel IP veya port yönlendirmesi olmadan internete açar. Yüklemek için aşağıdaki düğmeye tıklayın.",
+                "install": "Şimdi Yükle",
+                "installing": "Yükleniyor...",
+                "install_success": "Cloudflared başarıyla yüklendi",
+                "install_failed": "Yükleme başarısız: {{error}}",
+                "installed": "Yüklü",
+                "version": "Sürüm",
+                "mode_label": "Tünel Modu",
+                "mode_quick": "Hızlı Tünel",
+                "mode_quick_desc": "Otomatik oluşturulan geçici URL (*.trycloudflare.com), hesap gerekmez, yeniden başlatmada URL değişir",
+                "mode_auth": "Adlandırılmış Tünel",
+                "mode_auth_desc": "Cloudflare hesap token'ı kullan, özel domain destekler, kalıcı URL",
+                "token": "Tünel Token'ı",
+                "token_placeholder": "Cloudflare Tunnel Token'ınızı buraya yapıştırın",
+                "token_hint": "Cloudflare Zero Trust panosundan alın",
+                "token_required": "Adlandırılmış Tünel modu için token gereklidir",
+                "use_http2": "HTTP/2 Kullan",
+                "use_http2_desc": "Daha uyumlu, Çin anakarası için önerilir",
+                "status_label": "Tünel Durumu",
+                "status_stopped": "Durduruldu",
+                "status_starting": "Başlatılıyor...",
+                "status_running": "Çalışıyor",
+                "status_error": "Hata",
+                "public_url": "Genel URL",
+                "public_url_copied": "URL kopyalandı",
+                "start_tunnel": "Tüneli Başlat",
+                "stop_tunnel": "Tüneli Durdur",
+                "restart_tunnel": "Tüneli Yeniden Başlat",
+                "starting": "Başlatılıyor...",
+                "stopping": "Durduruluyor...",
+                "start_success": "Tünel başarıyla başlatıldı",
+                "stop_success": "Tünel durduruldu",
+                "start_failed": "Tünel başlatma başarısız: {{error}}",
+                "stop_failed": "Tünel durdurma başarısız: {{error}}",
+                "logs": "Loglar",
+                "clear_logs": "Logları Temizle",
+                "auto_start": "Proxy ile otomatik başlat",
+                "auto_start_desc": "API Proxy hizmeti başladığında tüneli otomatik olarak başlat",
+                "warning_quick_mode": "⚠️ Hızlı Mod: URL her yeniden başlatmada değişir",
+                "warning_token_storage": "💡 Token yerel olarak güvenli bir şekilde saklanır"
             }
         },
         "example": {
@@ -512,6 +654,10 @@
             "title": "Model Yönlendirici",
             "subtitle": "Modelleri serilere göre yönlendirin veya özel tam eşlemeler ekleyin.\nNot: Yerel Claude geçiş modelleri (örn. claude-opus-4-5-thinking) varsayılan olarak seri gruplarını atlar. Geçersiz kılmak için \"Uzman Özel Yönlendirme\" kullanın.",
             "subtitle_simple": "Joker karakterlerle veya tam eşlemelerle model yönlendirmeyi özelleştirin",
+            "background_task_title": "Background Task Model",
+            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
+            "use_default": "Use System Default",
+            "current_model": "Current Model",
             "apply_presets": "Ön Ayarları Uygula",
             "presets_applied": "Ön ayarlar başarıyla uygulandı",
             "custom_mappings": "Özel Eşlemeler",
@@ -560,20 +706,52 @@
             "default_suffix": " (Varsayılan)",
             "original_id": "Orijinal Kimlik",
             "route_to": "Şuna Yönlendir",
-            "select_target_model": "Hedef Model Seç"
+            "select_target_model": "Hedef Model Seç",
+            "original_placeholder": "Orijinal (örn: gpt-4 veya gpt-4*)"
         },
         "multi_protocol": {
             "title": "Çoklu Protokol Desteği",
-            "subtitle": "Protokol Desteği",
-            "description": "Proxy hizmeti farklı araç gereksinimlerini karşılamak için hem OpenAI hem de Anthropic API formatlarını destekler",
-            "openai_label": "OpenAI Protokolü",
-            "anthropic_label": "Anthropic Protokolü",
+            "subtitle": "Protokolleri ve anahtarları araçlarınızla senkronize edin",
+            "description": "Proxy, kolay entegrasyon için OpenAI, Anthropic ve Gemini protokollerini destekler.",
+            "openai_label": "OpenAI",
+            "anthropic_label": "Anthropic",
             "openai_tools": "Cherry Studio, NextChat",
             "anthropic_tools": "Claude Code CLI",
-            "gemini_label": "Gemini Protokolü",
+            "gemini_label": "Gemini",
             "gemini_tools": "Google AI SDK, LangChain",
             "quick_integration": "Hızlı Entegrasyon",
-            "click_tip": "👆 Bu kodu güncellemek için soldaki herhangi bir modele tıklayın."
+            "click_tip": "👆 Model kodunu güncellemek için modele tıklayın",
+            "copy_base": "Base Kopyala"
+        },
+        "cli_sync": {
+            "title": "CLI Senkronizasyonu",
+            "subtitle": "Mevcut API URL'sini ve anahtarını AI CLI araçlarınızla senkronize edin",
+            "card_title": "{{name}} Yapılandırması",
+            "status": {
+                "not_installed": "Yüklü Değil",
+                "installed": "v{{version}}",
+                "synced": "Bu uygulamaya yönlendirilmiş",
+                "not_synced": "Senkronize Değil",
+                "detecting": "Algılanıyor...",
+                "current_base_url": "Mevcut Base URL"
+            },
+            "btn_sync": "Şimdi Senkronize Et",
+            "btn_view": "Yapılandırmayı Görüntüle",
+            "btn_restore": "Varsayılana Dön",
+            "btn_restore_backup": "Yedeği Geri Yükle",
+            "restore_backup_confirm": "Yedek yapılandırma bulundu. Geri yüklemek istediğinizden emin misiniz?",
+            "sync_confirm_title": "Senkronizasyon Onayı",
+            "sync_confirm_message": "{{name}} yapılandırmasını senkronize etmeye hazır. ⚠️ Uyarı: Bu işlem mevcut yerel yapılandırma dosyalarınızın (ör. oturum belirteçleri, API Anahtarları) üzerine yazacaktır. Devam etmek istediğinizden emin misiniz?",
+            "restore_confirm": "{{name}} yapılandırmasını varsayılan değerlere sıfırlamak istediğinizden emin misiniz?",
+            "modal": {
+                "view_title": "{{name}} Yapılandırma İçeriği",
+                "copy_success": "Panoya kopyalandı"
+            },
+            "toast": {
+                "config_missing": "Lütfen önce bir API anahtarı oluşturun ve hizmeti başlatın",
+                "sync_success": "Başarılı! {{name}} kullanıma hazır.",
+                "sync_error": "{{name}} senkronizasyon hatası: {{error}}"
+            }
         },
         "supported_models": {
             "title": "Desteklenen Modeller ve Entegrasyon",
@@ -605,12 +783,15 @@
             "gemini": "Gemini",
             "claude": "Claude",
             "images": "Görseller",
-            "reset": "Sıfırla"
+            "reset": "Sıfırla",
+            "by_account": "Hesaba göre filtrele",
+            "all_accounts": "Tüm Hesaplar"
         },
         "table": {
             "status": "Durum",
             "method": "Metot",
             "model": "Model",
+            "protocol": "Protokol",
             "account": "Hesap",
             "path": "Yol",
             "usage": "Token'lar",
@@ -623,14 +804,61 @@
             "request_payload": "İstek Yükü",
             "response_payload": "Yanıt Yükü",
             "duration": "Süre",
+            "token_stats": "Token Stats",
+            "settings": "Settings",
             "tokens": "Token'lar (G/Ç)",
             "time": "Zaman",
             "model": "Model",
-            "id": "İstek Kimliği"
+            "id": "İstek Kimliği",
+            "protocol": "Protokol",
+            "mapped_model": "Eşlenen Model",
+            "account_used": "Kullanılan Hesap",
+            "payload_empty": "Yük Yok"
         },
         "dialog": {
             "clear_title": "Proxy Loglarını Temizle",
             "clear_msg": "Tüm proxy loglarını temizlemek istediğinizden emin misiniz? Bu işlem geri alınamaz."
         }
+    },
+    "update_notification": {
+        "title": "Yeni Sürüm Mevcut",
+        "message": "Optimizasyonlar ve iyileştirmeler içeren yeni bir sürüm hazır. Mevcut: v{{current}}",
+        "action": "Şimdi Güncelle"
+    },
+    "login": {
+        "title": "Güvenli Erişim Kontrolü",
+        "desc": "Şu anda Web modunda çalışıyor. Erişmek için lütfen yönetici parolasını veya API Anahtarını girin.",
+        "placeholder": "Yönetici parolasını veya API Anahtarını girin",
+        "btn_login": "Doğrula ve Gir",
+        "note": "Not: Ayarlanmış ayrı bir yönetici parolası varsa, lütfen onu girin; aksi takdirde API_KEY girin.",
+        "lookup_hint": "Unuttuysanız, Mevcut API Anahtarını veya Web Kullanıcı Arayüzü Parolasını bulmak için docker logs antigravity-manager komutunu çalıştırın.",
+        "config_hint": "Veya görüntülemek için grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json komutunu çalıştırın."
+    },
+    "token_stats": {
+        "title": "Token İstatistikleri",
+        "hourly": "Saatlik",
+        "daily": "Günlük",
+        "weekly": "Haftalık",
+        "total_tokens": "Toplam Token",
+        "input_tokens": "Giriş Tokenleri",
+        "output_tokens": "Çıkış Tokenleri",
+        "accounts_used": "Aktif Hesaplar",
+        "models_used": "Kullanılan Modeller",
+        "model_trend": "Model Kullanım Trendi",
+        "account_trend": "Hesaba Göre Kullanım Trendi",
+        "usage_trend": "Token Kullanım Trendi",
+        "by_account": "Hesaba Göre",
+        "by_model": "Modele Göre",
+        "by_account_view": "Hesaba Göre",
+        "model_details": "Model Detayları",
+        "account_details": "Hesap Detayları",
+        "model": "Model",
+        "account": "Hesap",
+        "requests": "İstekler",
+        "input": "Giriş",
+        "output": "Çıkış",
+        "total": "Toplam",
+        "percentage": "Oran",
+        "no_data": "Veri yok"
     }
 }

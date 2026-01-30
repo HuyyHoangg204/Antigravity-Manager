@@ -28,7 +28,7 @@ pub enum AppError {
     Unknown(String),
 }
 
-// 实现 Serialize 以便可以作为 Tauri 命令的返回值
+// Implement Serialize so it can be used as a return value for Tauri commands
 impl Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -38,5 +38,5 @@ impl Serialize for AppError {
     }
 }
 
-// 为 Result 实现别名，简化使用
+// Implement alias for Result to simplify usage
 pub type AppResult<T> = Result<T, AppError>;

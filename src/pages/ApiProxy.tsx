@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { request as invoke } from '../utils/request';
+import { isTauri } from '../utils/env';
+import { copyToClipboard } from '../utils/clipboard';
 import {
     Power,
     Copy,
@@ -19,7 +20,6 @@ import {
     ArrowRight,
     Sparkles,
     Code,
-    Activity,
     Check,
     X,
     Edit2
@@ -31,6 +31,11 @@ import { showToast } from '../components/common/ToastContainer';
 import { cn } from '../utils/cn';
 import { useProxyModels } from '../hooks/useProxyModels';
 import GroupedSelect, { SelectOption } from '../components/common/GroupedSelect';
+import { CliSyncCard } from '../components/proxy/CliSyncCard';
+import DebouncedSlider from '../components/common/DebouncedSlider';
+import { listAccounts } from '../services/accountService';
+import CircuitBreaker from '../components/settings/CircuitBreaker';
+import { CircuitBreakerConfig } from '../types/config';
 
 interface ProxyStatus {
     running: boolean;
@@ -48,6 +53,7 @@ interface CollapsibleCardProps {
     children: React.ReactNode;
     defaultExpanded?: boolean;
     rightElement?: React.ReactNode;
+    allowInteractionWhenDisabled?: boolean;
 }
 
 function CollapsibleCard({
@@ -57,7 +63,8 @@ function CollapsibleCard({
     onToggle,
     children,
     defaultExpanded = false,
-    rightElement
+    rightElement,
+    allowInteractionWhenDisabled = false,
 }: CollapsibleCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
     const { t } = useTranslation();
@@ -116,10 +123,10 @@ function CollapsibleCard({
             >
                 <div className="p-5 relative">
                     {/* Overlay when disabled */}
-                    {enabled === false && (
+                    {enabled === false && !allowInteractionWhenDisabled && (
                         <div className="absolute inset-0 bg-gray-100/40 dark:bg-black/30 z-10 cursor-not-allowed" />
                     )}
-                    <div className={enabled === false ? 'opacity-60 pointer-events-none select-none' : ''}>
+                    <div className={enabled === false && !allowInteractionWhenDisabled ? 'opacity-60 pointer-events-none select-none' : ''}>
                         {children}
                     </div>
                 </div>
@@ -130,7 +137,6 @@ function CollapsibleCard({
 
 export default function ApiProxy() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
 
     const { models } = useProxyModels();
 
@@ -142,6 +148,8 @@ export default function ApiProxy() {
     });
 
     const [appConfig, setAppConfig] = useState<AppConfig | null>(null);
+    const [configLoading, setConfigLoading] = useState(true);
+    const [configError, setConfigError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [selectedProtocol, setSelectedProtocol] = useState<'openai' | 'anthropic' | 'gemini'>('openai');
@@ -159,10 +167,29 @@ export default function ApiProxy() {
     const [isEditingApiKey, setIsEditingApiKey] = useState(false);
     const [tempApiKey, setTempApiKey] = useState('');
 
+    // Admin Password editing states
+    const [isEditingAdminPassword, setIsEditingAdminPassword] = useState(false);
+    const [tempAdminPassword, setTempAdminPassword] = useState('');
+
     // Modal states
     const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
     const [isRegenerateKeyConfirmOpen, setIsRegenerateKeyConfirmOpen] = useState(false);
     const [isClearBindingsConfirmOpen, setIsClearBindingsConfirmOpen] = useState(false);
+    const [isClearRateLimitsConfirmOpen, setIsClearRateLimitsConfirmOpen] = useState(false);
+
+    // [FIX #820] Fixed account mode states
+    const [preferredAccountId, setPreferredAccountId] = useState<string | null>(null);
+    const [availableAccounts, setAvailableAccounts] = useState<Array<{ id: string; email: string }>>([]);
+
+    // Cloudflared (CF隧道) states
+    const [cfStatus, setCfStatus] = useState<{ installed: boolean; version?: string; running: boolean; url?: string; error?: string }>({
+        installed: false,
+        running: false,
+    });
+    const [cfLoading, setCfLoading] = useState(false);
+    const [cfMode, setCfMode] = useState<'quick' | 'auth'>('quick');
+    const [cfToken, setCfToken] = useState('');
+    const [cfUseHttp2, setCfUseHttp2] = useState(true); // 默认启用HTTP/2，更稳定
 
     const zaiModelOptions = useMemo(() => {
         const unique = new Set(zaiAvailableModels);
@@ -187,32 +214,183 @@ export default function ApiProxy() {
     useEffect(() => {
         loadConfig();
         loadStatus();
+        loadAccounts();
+        loadPreferredAccount();
+        loadCfStatus();
         const interval = setInterval(loadStatus, 3000);
-        return () => clearInterval(interval);
+        const cfInterval = setInterval(loadCfStatus, 5000);
+        return () => {
+            clearInterval(interval);
+            clearInterval(cfInterval);
+        };
     }, []);
 
+    // [FIX #820] Load available accounts for fixed account mode
+    const loadAccounts = async () => {
+        try {
+            const accounts = await listAccounts();
+            setAvailableAccounts(accounts.map(a => ({ id: a.id, email: a.email })));
+        } catch (error) {
+            console.error('Failed to load accounts:', error);
+        }
+    };
+
+    // Cloudflared: 检查状态
+    const loadCfStatus = async () => {
+        try {
+            const status = await invoke<typeof cfStatus>('cloudflared_get_status');
+            setCfStatus(status);
+        } catch (error) {
+            // 忽略错误，可能是manager未初始化
+        }
+    };
+
+    // Cloudflared: 安装
+    const handleCfInstall = async () => {
+        console.log('[Cloudflared] Install button clicked');
+        setCfLoading(true);
+        try {
+            console.log('[Cloudflared] Calling cloudflared_install...');
+            const status = await invoke<typeof cfStatus>('cloudflared_install');
+            console.log('[Cloudflared] Install result:', status);
+            setCfStatus(status);
+            showToast(t('proxy.cloudflared.install_success', { defaultValue: 'Cloudflared installed successfully' }), 'success');
+        } catch (error) {
+            console.error('[Cloudflared] Install error:', error);
+            showToast(String(error), 'error');
+        } finally {
+            setCfLoading(false);
+        }
+    };
+
+    // Cloudflared: 启动/停止
+    const handleCfToggle = async (enable: boolean) => {
+        if (enable && !status.running) {
+            showToast(
+                t('proxy.cloudflared.require_proxy_running', { defaultValue: 'Please start the local proxy service first' }),
+                'warning'
+            );
+            return;
+        }
+        setCfLoading(true);
+        try {
+            if (enable) {
+                if (!cfStatus.installed) {
+                    const installStatus = await invoke<typeof cfStatus>('cloudflared_install');
+                    setCfStatus(installStatus);
+                    if (!installStatus.installed) {
+                        throw new Error('Cloudflared install failed');
+                    }
+                    showToast(t('proxy.cloudflared.install_success', { defaultValue: 'Cloudflared installed successfully' }), 'success');
+                }
+
+                const config = {
+                    enabled: true,
+                    mode: cfMode,
+                    port: appConfig?.proxy.port || 8045,
+                    token: cfMode === 'auth' ? cfToken : null,
+                    use_http2: cfUseHttp2,
+                };
+                const status = await invoke<typeof cfStatus>('cloudflared_start', { config });
+                setCfStatus(status);
+                showToast(t('proxy.cloudflared.started', { defaultValue: 'Tunnel started' }), 'success');
+            } else {
+                const status = await invoke<typeof cfStatus>('cloudflared_stop');
+                setCfStatus(status);
+                showToast(t('proxy.cloudflared.stopped', { defaultValue: 'Tunnel stopped' }), 'success');
+            }
+        } catch (error) {
+            showToast(String(error), 'error');
+        } finally {
+            setCfLoading(false);
+        }
+    };
+
+    // Cloudflared: 复制URL
+    const handleCfCopyUrl = async () => {
+        if (cfStatus.url) {
+            const success = await copyToClipboard(cfStatus.url);
+            if (success) {
+                setCopied('cf-url');
+                setTimeout(() => setCopied(null), 2000);
+            }
+        }
+    };
+
+    // [FIX #820] Load current preferred account
+    const loadPreferredAccount = async () => {
+        try {
+            const prefId = await invoke<string | null>('get_preferred_account');
+            setPreferredAccountId(prefId);
+        } catch (error) {
+            // Service not running, ignore
+        }
+    };
+
+    // [FIX #820] Set preferred account
+    const handleSetPreferredAccount = async (accountId: string | null) => {
+        try {
+            const wasEnabled = preferredAccountId !== null;
+            await invoke('set_preferred_account', { accountId });
+            setPreferredAccountId(accountId);
+
+            // Determine appropriate message
+            let message: string;
+            if (accountId === null) {
+                message = t('proxy.config.scheduling.round_robin_set', { defaultValue: 'Round-robin mode enabled' });
+            } else if (wasEnabled) {
+                // Changed account while already in fixed mode
+                const account = availableAccounts.find(a => a.id === accountId);
+                message = t('proxy.config.scheduling.account_changed', {
+                    defaultValue: `Switched to ${account?.email || accountId}`,
+                    email: account?.email || accountId
+                });
+            } else {
+                // Just enabled fixed mode
+                message = t('proxy.config.scheduling.fixed_account_set', { defaultValue: 'Fixed account mode enabled' });
+            }
+
+            showToast(message, 'success');
+        } catch (error) {
+            showToast(String(error), 'error');
+        }
+    };
+
     const loadConfig = async () => {
+        setConfigLoading(true);
+        setConfigError(null);
         try {
             const config = await invoke<AppConfig>('load_config');
             setAppConfig(config);
         } catch (error) {
             console.error('加载配置失败:', error);
+            setConfigError(String(error));
+        } finally {
+            setConfigLoading(false);
         }
     };
 
     const loadStatus = async () => {
         try {
             const s = await invoke<ProxyStatus>('get_proxy_status');
-            setStatus(s);
+            // 如果后端返回 starting 或 busy，则在 UI 上表现为加载中
+            if (s.base_url === 'starting' || s.base_url === 'busy') {
+                // 如果当前已经是运行状态，不要被覆盖为 false
+                setStatus(prev => ({ ...s, running: prev.running }));
+            } else {
+                setStatus(s);
+            }
         } catch (error) {
             console.error('获取状态失败:', error);
         }
     };
 
+
     const saveConfig = async (newConfig: AppConfig) => {
+        // 1. 立即更新 UI 状态，确保流畅
+        setAppConfig(newConfig);
         try {
             await invoke('save_config', { config: newConfig });
-            setAppConfig(newConfig);
         } catch (error) {
             console.error('保存配置失败:', error);
             showToast(`${t('common.error')}: ${error}`, 'error');
@@ -281,8 +459,8 @@ export default function ApiProxy() {
             "claude-3-5-sonnet-*": "claude-sonnet-4-5",
             "claude-3-opus-*": "claude-opus-4-5-thinking",
             "claude-opus-4-*": "claude-opus-4-5-thinking",
-            "claude-haiku-*": "gemini-2.5-flash-lite",
-            "claude-3-haiku-*": "gemini-2.5-flash-lite",
+            "claude-haiku-*": "gemini-2.5-flash",
+            "claude-3-haiku-*": "gemini-2.5-flash",
         };
 
         const newConfig = {
@@ -347,10 +525,24 @@ export default function ApiProxy() {
             proxy: {
                 ...appConfig.proxy,
                 experimental: {
-                    ...(appConfig.proxy.experimental || { enable_usage_scaling: true }),
+                    ...(appConfig.proxy.experimental || {
+                        enable_usage_scaling: true,
+                        context_compression_threshold_l1: 0.4,
+                        context_compression_threshold_l2: 0.55,
+                        context_compression_threshold_l3: 0.7
+                    }),
                     ...updates
                 }
             }
+        };
+        saveConfig(newConfig);
+    };
+
+    const updateCircuitBreakerConfig = (newBreakerConfig: CircuitBreakerConfig) => {
+        if (!appConfig) return;
+        const newConfig = {
+            ...appConfig,
+            circuit_breaker: newBreakerConfig
         };
         saveConfig(newConfig);
     };
@@ -366,6 +558,21 @@ export default function ApiProxy() {
             showToast(t('common.success'), 'success');
         } catch (error) {
             console.error('Failed to clear session bindings:', error);
+            showToast(`${t('common.error')}: ${error}`, 'error');
+        }
+    };
+
+    const handleClearRateLimits = () => {
+        setIsClearRateLimitsConfirmOpen(true);
+    };
+
+    const executeClearRateLimits = async () => {
+        setIsClearRateLimitsConfirmOpen(false);
+        try {
+            await invoke('clear_all_proxy_rate_limits');
+            showToast(t('common.success'), 'success');
+        } catch (error) {
+            console.error('Failed to clear rate limits:', error);
             showToast(`${t('common.error')}: ${error}`, 'error');
         }
     };
@@ -490,10 +697,12 @@ export default function ApiProxy() {
         }
     };
 
-    const copyToClipboard = (text: string, label: string) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopied(label);
-            setTimeout(() => setCopied(null), 2000);
+    const copyToClipboardHandler = (text: string, label: string) => {
+        copyToClipboard(text).then((success) => {
+            if (success) {
+                setCopied(label);
+                setTimeout(() => setCopied(null), 2000);
+            }
         });
     };
 
@@ -521,6 +730,28 @@ export default function ApiProxy() {
     const handleCancelEditApiKey = () => {
         setTempApiKey('');
         setIsEditingApiKey(false);
+    };
+
+    // Admin Password editing functions
+    const handleEditAdminPassword = () => {
+        setTempAdminPassword(appConfig?.proxy.admin_password || '');
+        setIsEditingAdminPassword(true);
+    };
+
+    const handleSaveAdminPassword = () => {
+        // Validation: can be empty (meaning fallback to api_key) or at least 4 chars
+        if (tempAdminPassword && tempAdminPassword.length < 4) {
+            showToast(t('proxy.config.admin_password_short', { defaultValue: 'Password is too short (min 4 chars)' }), 'error');
+            return;
+        }
+        updateProxyConfig({ admin_password: tempAdminPassword || undefined });
+        setIsEditingAdminPassword(false);
+        showToast(t('proxy.config.admin_password_updated', { defaultValue: 'Web UI password updated' }), 'success');
+    };
+
+    const handleCancelEditAdminPassword = () => {
+        setTempAdminPassword('');
+        setIsEditingAdminPassword(false);
     };
 
 
@@ -626,9 +857,46 @@ print(response.text)`;
         <div className="h-full w-full overflow-y-auto overflow-x-hidden">
             <div className="p-5 space-y-4 max-w-7xl mx-auto">
 
+                {/* Loading State */}
+                {configLoading && (
+                    <div className="flex items-center justify-center py-20">
+                        <div className="flex flex-col items-center gap-4">
+                            <RefreshCw size={32} className="animate-spin text-blue-500" />
+                            <span className="text-sm text-gray-500 dark:text-gray-400">
+                                {t('common.loading') || 'Loading...'}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Error State */}
+                {!configLoading && configError && (
+                    <div className="flex items-center justify-center py-20">
+                        <div className="flex flex-col items-center gap-4 text-center">
+                            <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                                <Settings size={32} className="text-red-500" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    {t('proxy.error.load_failed') || 'Failed to load configuration'}
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
+                                    {configError}
+                                </p>
+                            </div>
+                            <button
+                                onClick={loadConfig}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium flex items-center gap-2 transition-colors"
+                            >
+                                <RefreshCw size={16} />
+                                {t('common.retry') || 'Retry'}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* 配置区 */}
-                {appConfig && (
+                {!configLoading && !configError && appConfig && (
                     <div className="bg-white dark:bg-base-100 rounded-xl shadow-sm border border-gray-100 dark:border-base-200">
                         <div className="px-4 py-2.5 border-b border-gray-100 dark:border-base-200 flex items-center justify-between">
                             <div className="flex items-center gap-4">
@@ -649,15 +917,6 @@ print(response.text)`;
 
                             {/* 控制按钮 */}
                             <div className="flex items-center gap-2">
-                                {status.running && (
-                                    <button
-                                        onClick={() => navigate('/monitor')}
-                                        className="px-3 py-1 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 border bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-blue-600"
-                                    >
-                                        <Activity size={14} />
-                                        {t('monitor.open_monitor')}
-                                    </button>
-                                )}
                                 <button
                                     onClick={handleToggle}
                                     disabled={loading || !appConfig}
@@ -714,11 +973,11 @@ print(response.text)`;
                                         value={appConfig.proxy.request_timeout || 120}
                                         onChange={(e) => {
                                             const value = parseInt(e.target.value);
-                                            const timeout = Math.max(30, Math.min(3600, value));
+                                            const timeout = Math.max(30, Math.min(7200, value));
                                             updateProxyConfig({ request_timeout: timeout });
                                         }}
                                         min={30}
-                                        max={3600}
+                                        max={7200}
                                         disabled={status.running}
                                         className="w-full px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 text-xs text-gray-900 dark:text-base-content focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
@@ -800,7 +1059,7 @@ print(response.text)`;
                                             </label>
                                             <label className="flex items-center cursor-pointer gap-2">
                                                 <span className="text-[11px] text-gray-600 dark:text-gray-400 inline-flex items-center gap-1">
-                                                    {t('proxy.config.auth.enabled')}
+                                                    {(appConfig.proxy.auth_mode || 'off') !== 'off' ? t('proxy.config.auth.enabled') : t('common.disabled')}
                                                     <HelpTooltip
                                                         text={t('proxy.config.auth.enabled_tooltip')}
                                                         ariaLabel={t('proxy.config.auth.enabled')}
@@ -909,7 +1168,7 @@ print(response.text)`;
                                                 <RefreshCw size={14} />
                                             </button>
                                             <button
-                                                onClick={() => copyToClipboard(appConfig.proxy.api_key, 'api_key')}
+                                                onClick={() => copyToClipboardHandler(appConfig.proxy.api_key, 'api_key')}
                                                 className="px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 hover:bg-gray-50 dark:hover:bg-base-300 transition-colors"
                                                 title={t('proxy.config.btn_copy')}
                                             >
@@ -927,6 +1186,75 @@ print(response.text)`;
                                 </p>
                             </div>
 
+                            {/* Web UI 管理密码 */}
+                            <div className="border-t border-gray-200 dark:border-base-300 pt-3 mt-3">
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    <span className="inline-flex items-center gap-1">
+                                        {t('proxy.config.admin_password', { defaultValue: 'Web UI Login Password' })}
+                                        <HelpTooltip
+                                            text={t('proxy.config.admin_password_tooltip', { defaultValue: 'Used for logging into the Web Management Console. If empty, it defaults to the API Key.' })}
+                                            ariaLabel={t('proxy.config.admin_password')}
+                                            placement="right"
+                                        />
+                                    </span>
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={isEditingAdminPassword ? tempAdminPassword : (appConfig.proxy.admin_password || t('proxy.config.admin_password_default', { defaultValue: '(Same as API Key)' }))}
+                                        onChange={(e) => isEditingAdminPassword && setTempAdminPassword(e.target.value)}
+                                        readOnly={!isEditingAdminPassword}
+                                        placeholder={t('proxy.config.admin_password_placeholder', { defaultValue: 'Enter new password or leave empty to use API Key' })}
+                                        className={`flex-1 px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg text-xs font-mono ${isEditingAdminPassword
+                                            ? 'bg-white dark:bg-base-200 text-gray-900 dark:text-base-content'
+                                            : 'bg-gray-50 dark:bg-base-300 text-gray-600 dark:text-gray-400'
+                                            }`}
+                                    />
+                                    {isEditingAdminPassword ? (
+                                        <>
+                                            <button
+                                                onClick={handleSaveAdminPassword}
+                                                className="px-2.5 py-1.5 border border-green-300 dark:border-green-700 rounded-lg bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors text-green-600 dark:text-green-400"
+                                                title={t('proxy.config.btn_save')}
+                                            >
+                                                <CheckCircle size={14} />
+                                            </button>
+                                            <button
+                                                onClick={handleCancelEditAdminPassword}
+                                                className="px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 hover:bg-gray-50 dark:hover:bg-base-300 transition-colors"
+                                                title={t('common.cancel')}
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={handleEditAdminPassword}
+                                                className="px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 hover:bg-gray-50 dark:hover:bg-base-300 transition-colors"
+                                                title={t('proxy.config.btn_edit')}
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button
+                                                onClick={() => copyToClipboardHandler(appConfig.proxy.admin_password || appConfig.proxy.api_key, 'admin_password')}
+                                                className="px-2.5 py-1.5 border border-gray-300 dark:border-base-200 rounded-lg bg-white dark:bg-base-200 hover:bg-gray-50 dark:hover:bg-base-300 transition-colors"
+                                                title={t('proxy.config.btn_copy')}
+                                            >
+                                                {copied === 'admin_password' ? (
+                                                    <CheckCircle size={14} className="text-green-500" />
+                                                ) : (
+                                                    <Copy size={14} />
+                                                )}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                                <p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                    {t('proxy.config.admin_password_hint', { defaultValue: 'For safety in Docker/Browser environments, you can set a separate login password from your API Key.' })}
+                                </p>
+                            </div>
+
 
                         </div>
                     </div>
@@ -934,7 +1262,7 @@ print(response.text)`;
 
                 {/* External Providers Integration */}
                 {
-                    appConfig && (
+                    !configLoading && !configError && appConfig && (
                         <div className="space-y-4">
                             <div className="px-1 flex items-center gap-2 text-gray-400">
                                 <Layers size={14} />
@@ -942,6 +1270,12 @@ print(response.text)`;
                                     {t('proxy.config.external_providers.title', { defaultValue: 'External Providers' })}
                                 </span>
                             </div>
+
+                            {/* CLI 同步卡片 - 支持桌面端与 Web 端 */}
+                            <CliSyncCard
+                                proxyUrl={status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`}
+                                apiKey={appConfig.proxy.api_key}
+                            />
 
                             {/* z.ai (GLM) Dispatcher */}
                             <CollapsibleCard
@@ -1077,13 +1411,13 @@ print(response.text)`;
                                                 <div className="flex items-center gap-2 pt-2 border-t border-gray-200/50">
                                                     <input
                                                         className="input input-xs input-bordered flex-1 font-mono"
-                                                        placeholder="From (e.g. claude-3-opus)"
+                                                        placeholder={t('proxy.config.zai.models.from_placeholder') || "From (e.g. claude-3-opus)"}
                                                         value={zaiNewMappingFrom}
                                                         onChange={e => setZaiNewMappingFrom(e.target.value)}
                                                     />
                                                     <input
                                                         className="input input-xs input-bordered flex-1 font-mono"
-                                                        placeholder="To (e.g. glm-4)"
+                                                        placeholder={t('proxy.config.zai.models.to_placeholder') || "To (e.g. glm-4)"}
                                                         value={zaiNewMappingTo}
                                                         onChange={e => setZaiNewMappingTo(e.target.value)}
                                                     />
@@ -1184,13 +1518,17 @@ print(response.text)`;
                                                         placement="right"
                                                     />
                                                 </label>
-                                                <button
-                                                    onClick={handleClearSessionBindings}
-                                                    className="text-[10px] text-indigo-500 hover:text-indigo-600 transition-colors flex items-center gap-1"
-                                                >
-                                                    <Trash2 size={12} />
-                                                    {t('proxy.config.scheduling.clear_bindings')}
-                                                </button>
+                                                <div className="flex items-center gap-3">
+                                                    {/* [MOVED] Clear Rate Limit button moved to CircuitBreaker component */}
+                                                    <button
+                                                        onClick={handleClearSessionBindings}
+                                                        className="text-[10px] text-indigo-500 hover:text-indigo-600 transition-colors flex items-center gap-1"
+                                                        title={t('proxy.config.scheduling.clear_bindings_tooltip')}
+                                                    >
+                                                        <Trash2 size={12} />
+                                                        {t('proxy.config.scheduling.clear_bindings')}
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {(['CacheFirst', 'Balance', 'PerformanceFirst'] as const).map(mode => (
@@ -1256,8 +1594,80 @@ print(response.text)`;
                                                     <strong>{t('common.info')}:</strong> {t('proxy.config.scheduling.subtitle')}
                                                 </p>
                                             </div>
+
+                                            {/* [FIX #820] Fixed Account Mode */}
+                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-800">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <label className="text-xs font-medium text-gray-700 dark:text-gray-300 inline-flex items-center gap-1">
+                                                        🔒 {t('proxy.config.scheduling.fixed_account', { defaultValue: 'Fixed Account Mode' })}
+                                                        <HelpTooltip text={t('proxy.config.scheduling.fixed_account_tooltip', { defaultValue: 'When enabled, all API requests will use only the selected account instead of rotating between accounts.' })} />
+                                                    </label>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="toggle toggle-sm toggle-primary"
+                                                        checked={preferredAccountId !== null}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                // Enable fixed mode with first available account
+                                                                if (availableAccounts.length > 0) {
+                                                                    handleSetPreferredAccount(availableAccounts[0].id);
+                                                                }
+                                                            } else {
+                                                                // Disable fixed mode
+                                                                handleSetPreferredAccount(null);
+                                                            }
+                                                        }}
+                                                        disabled={!status.running}
+                                                    />
+                                                </div>
+                                                {preferredAccountId !== null && (
+                                                    <select
+                                                        className="select select-bordered select-sm w-full text-xs"
+                                                        value={preferredAccountId || ''}
+                                                        onChange={(e) => handleSetPreferredAccount(e.target.value || null)}
+                                                        disabled={!status.running}
+                                                    >
+                                                        {availableAccounts.map(account => (
+                                                            <option key={account.id} value={account.id}>
+                                                                {account.email}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                                {!status.running && (
+                                                    <p className="text-[10px] text-gray-500 mt-2">
+                                                        {t('proxy.config.scheduling.start_proxy_first', { defaultValue: 'Start the proxy service to configure fixed account mode.' })}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {/* Circuit Breaker Section */}
+                                    {appConfig.circuit_breaker && (
+                                        <div className="pt-4 border-t border-gray-100 dark:border-gray-700/50">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 inline-flex items-center gap-1">
+                                                    {t('proxy.config.circuit_breaker.title', { defaultValue: 'Adaptive Circuit Breaker' })}
+                                                    <HelpTooltip text={t('proxy.config.circuit_breaker.tooltip', { defaultValue: 'Prevent continuous failures by exponentially backing off when quota is exhausted.' })} />
+                                                </label>
+                                                <input
+                                                    type="checkbox"
+                                                    className="toggle toggle-sm toggle-warning"
+                                                    checked={appConfig.circuit_breaker.enabled}
+                                                    onChange={(e) => updateCircuitBreakerConfig({ ...appConfig.circuit_breaker, enabled: e.target.checked })}
+                                                />
+                                            </div>
+
+                                            {appConfig.circuit_breaker.enabled && (
+                                                <CircuitBreaker
+                                                    config={appConfig.circuit_breaker}
+                                                    onChange={updateCircuitBreakerConfig}
+                                                    onClearRateLimits={handleClearRateLimits}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </CollapsibleCard>
 
@@ -1292,15 +1702,239 @@ print(response.text)`;
                                             <div className="w-11 h-6 bg-gray-200 dark:bg-base-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500 shadow-inner"></div>
                                         </label>
                                     </div>
+
+                                    {/* L1 Threshold */}
+                                    <div className="flex flex-col gap-2 p-4 bg-gray-50 dark:bg-base-200 rounded-xl border border-gray-100 dark:border-base-300">
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                    {t('proxy.config.experimental.context_compression_threshold_l1')}
+                                                </span>
+                                                <HelpTooltip text={t('proxy.config.experimental.context_compression_threshold_l1_tooltip')} />
+                                            </div>
+                                        </div>
+                                        <DebouncedSlider
+                                            min={0.1}
+                                            max={1}
+                                            step={0.05}
+                                            className="range range-purple range-xs"
+                                            value={appConfig.proxy.experimental?.context_compression_threshold_l1 || 0.4}
+                                            onChange={(val) => updateExperimentalConfig({ context_compression_threshold_l1: val })}
+                                        />
+                                    </div>
+
+                                    {/* L2 Threshold */}
+                                    <div className="flex flex-col gap-2 p-4 bg-gray-50 dark:bg-base-200 rounded-xl border border-gray-100 dark:border-base-300">
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                    {t('proxy.config.experimental.context_compression_threshold_l2')}
+                                                </span>
+                                                <HelpTooltip text={t('proxy.config.experimental.context_compression_threshold_l2_tooltip')} />
+                                            </div>
+                                        </div>
+                                        <DebouncedSlider
+                                            min={0.1}
+                                            max={1}
+                                            step={0.05}
+                                            className="range range-purple range-xs"
+                                            value={appConfig.proxy.experimental?.context_compression_threshold_l2 || 0.55}
+                                            onChange={(val) => updateExperimentalConfig({ context_compression_threshold_l2: val })}
+                                        />
+                                    </div>
+
+                                    {/* L3 Threshold */}
+                                    <div className="flex flex-col gap-2 p-4 bg-gray-50 dark:bg-base-200 rounded-xl border border-gray-100 dark:border-base-300">
+                                        <div className="flex items-center justify-between w-full">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                    {t('proxy.config.experimental.context_compression_threshold_l3')}
+                                                </span>
+                                                <HelpTooltip text={t('proxy.config.experimental.context_compression_threshold_l3_tooltip')} />
+                                            </div>
+                                        </div>
+                                        <DebouncedSlider
+                                            min={0.1}
+                                            max={1}
+                                            step={0.05}
+                                            className="range range-purple range-xs"
+                                            value={appConfig.proxy.experimental?.context_compression_threshold_l3 || 0.7}
+                                            onChange={(val) => updateExperimentalConfig({ context_compression_threshold_l3: val })}
+                                        />
+                                    </div>
                                 </div>
                             </CollapsibleCard>
+
+                            {/* 公网访问 (Cloudflared) - 仅在桌面端显示 */}
+                            {isTauri() && (
+                                <CollapsibleCard
+                                    title={t('proxy.cloudflared.title', { defaultValue: 'Public Access (Cloudflared)' })}
+                                    icon={<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500"><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>}
+                                    enabled={cfStatus.running}
+                                    onToggle={handleCfToggle}
+                                    allowInteractionWhenDisabled={true}
+                                    rightElement={
+                                        cfLoading ? (
+                                            <span className="loading loading-spinner loading-xs"></span>
+                                        ) : cfStatus.running && cfStatus.url ? (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleCfCopyUrl(); }}
+                                                className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors flex items-center gap-1"
+                                            >
+                                                {copied === 'cf-url' ? <CheckCircle size={12} /> : <Copy size={12} />}
+                                                {cfStatus.url.replace('https://', '').slice(0, 20)}...
+                                            </button>
+                                        ) : null
+                                    }
+                                >
+                                    <div className="space-y-4">
+                                        {/* 安装状态 */}
+                                        {!cfStatus.installed ? (
+                                            <div className="flex items-center justify-between p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                                                <div className="space-y-1">
+                                                    <span className="text-sm font-bold text-yellow-800 dark:text-yellow-200">
+                                                        {t('proxy.cloudflared.not_installed', { defaultValue: 'Cloudflared not installed' })}
+                                                    </span>
+                                                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                                                        {t('proxy.cloudflared.install_hint', { defaultValue: 'Click to download and install cloudflared binary' })}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={handleCfInstall}
+                                                    disabled={cfLoading}
+                                                    className="px-4 py-2 rounded-lg text-sm font-medium bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    {cfLoading ? <span className="loading loading-spinner loading-xs"></span> : null}
+                                                    {t('proxy.cloudflared.install', { defaultValue: 'Install' })}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* 版本信息 */}
+                                                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                                    <CheckCircle size={14} className="text-green-500" />
+                                                    {t('proxy.cloudflared.installed', { defaultValue: 'Installed' })}: {cfStatus.version || 'Unknown'}
+                                                </div>
+
+                                                {/* 隧道模式选择 */}
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button
+                                                        onClick={() => setCfMode('quick')}
+                                                        disabled={cfStatus.running}
+                                                        className={cn(
+                                                            "p-3 rounded-lg border-2 text-left transition-all",
+                                                            cfMode === 'quick'
+                                                                ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20"
+                                                                : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600",
+                                                            cfStatus.running && "opacity-60 cursor-not-allowed"
+                                                        )}
+                                                    >
+                                                        <div className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                            {t('proxy.cloudflared.mode_quick', { defaultValue: 'Quick Tunnel' })}
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                                                            {t('proxy.cloudflared.mode_quick_desc', { defaultValue: 'Auto-generated temporary URL (*.trycloudflare.com)' })}
+                                                        </p>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setCfMode('auth')}
+                                                        disabled={cfStatus.running}
+                                                        className={cn(
+                                                            "p-3 rounded-lg border-2 text-left transition-all",
+                                                            cfMode === 'auth'
+                                                                ? "border-orange-500 bg-orange-50 dark:bg-orange-900/20"
+                                                                : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600",
+                                                            cfStatus.running && "opacity-60 cursor-not-allowed"
+                                                        )}
+                                                    >
+                                                        <div className="text-sm font-bold text-gray-900 dark:text-base-content">
+                                                            {t('proxy.cloudflared.mode_auth', { defaultValue: 'Named Tunnel' })}
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                                                            {t('proxy.cloudflared.mode_auth_desc', { defaultValue: 'Use your Cloudflare account with custom domain' })}
+                                                        </p>
+                                                    </button>
+                                                </div>
+
+                                                {/* Token输入 (仅auth模式) */}
+                                                {cfMode === 'auth' && (
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                            {t('proxy.cloudflared.token', { defaultValue: 'Tunnel Token' })}
+                                                        </label>
+                                                        <input
+                                                            type="password"
+                                                            value={cfToken}
+                                                            onChange={(e) => setCfToken(e.target.value)}
+                                                            disabled={cfStatus.running}
+                                                            placeholder="eyJhIjoiNj..."
+                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-base-200 text-sm font-mono disabled:opacity-60"
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* HTTP2选项 */}
+                                                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-base-200 rounded-lg">
+                                                    <div className="space-y-0.5">
+                                                        <span className="text-sm font-medium text-gray-900 dark:text-base-content">
+                                                            {t('proxy.cloudflared.use_http2', { defaultValue: 'Use HTTP/2' })}
+                                                        </span>
+                                                        <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                                                            {t('proxy.cloudflared.use_http2_desc', { defaultValue: 'More compatible, recommended for China mainland' })}
+                                                        </p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="toggle toggle-sm"
+                                                        checked={cfUseHttp2}
+                                                        onChange={(e) => setCfUseHttp2(e.target.checked)}
+                                                        disabled={cfStatus.running}
+                                                    />
+                                                </div>
+
+                                                {/* 运行状态和URL */}
+                                                {cfStatus.running && (
+                                                    <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                                            <span className="text-sm font-bold text-green-800 dark:text-green-200">
+                                                                {t('proxy.cloudflared.running', { defaultValue: 'Tunnel Running' })}
+                                                            </span>
+                                                        </div>
+                                                        {cfStatus.url && (
+                                                            <div className="flex items-center gap-2">
+                                                                <code className="flex-1 px-3 py-2 bg-white dark:bg-base-100 rounded text-xs font-mono text-gray-800 dark:text-gray-200 border border-green-200 dark:border-green-800">
+                                                                    {cfStatus.url}
+                                                                </code>
+                                                                <button
+                                                                    onClick={handleCfCopyUrl}
+                                                                    className="p-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
+                                                                >
+                                                                    {copied === 'cf-url' ? <CheckCircle size={16} /> : <Copy size={16} />}
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* 错误信息 */}
+                                                {cfStatus.error && (
+                                                    <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
+                                                        {cfStatus.error}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </CollapsibleCard>
+                            )}
                         </div>
                     )
                 }
 
                 {/* 模型路由中心 */}
                 {
-                    appConfig && (
+                    !configLoading && !configError && appConfig && (
                         <div className="bg-white dark:bg-base-100 rounded-xl shadow-sm border border-gray-100 dark:border-base-200 overflow-hidden">
                             <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
                                 <div className="flex items-center justify-between">
@@ -1335,6 +1969,46 @@ print(response.text)`;
                             <div className="p-3 space-y-3">
                                 {/* 精确映射管理 */}
                                 <div>
+                                    {/* 后台任务模型配置 (Compact Mode) */}
+                                    <div className="mb-4 pb-4 border-b border-gray-100 dark:border-base-200">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div className="flex-1">
+                                                <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                                    <Sparkles size={14} className="text-blue-500" />
+                                                    {t('proxy.router.background_task_title')}
+                                                </h3>
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    {t('proxy.router.background_task_desc')}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 w-full sm:w-auto min-w-[200px] max-w-sm">
+                                                <div className="relative flex-1">
+                                                    <GroupedSelect
+                                                        value={appConfig.proxy.custom_mapping?.['internal-background-task'] || ''}
+                                                        onChange={(val) => handleMappingUpdate('custom', 'internal-background-task', val)}
+                                                        options={[
+                                                            { value: '', label: 'Default (gemini-2.5-flash)', group: 'System' },
+                                                            ...customMappingOptions
+                                                        ]}
+                                                        placeholder="Default (gemini-2.5-flash)"
+                                                        className="font-mono text-[11px] h-8 dark:bg-base-200 w-full"
+                                                    />
+                                                </div>
+
+                                                {appConfig.proxy.custom_mapping && appConfig.proxy.custom_mapping['internal-background-task'] && (
+                                                    <button
+                                                        onClick={() => handleRemoveCustomMapping('internal-background-task')}
+                                                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                                                        title={t('proxy.router.use_default')}
+                                                    >
+                                                        <RefreshCw size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div className="flex items-center justify-between mb-3">
                                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
                                             <ArrowRight size={14} /> {t('proxy.router.custom_mappings')}
@@ -1435,7 +2109,7 @@ print(response.text)`;
                                                     <input
                                                         id="custom-key"
                                                         type="text"
-                                                        placeholder="Original (e.g. gpt-4 or gpt-4*)"
+                                                        placeholder={t('proxy.router.original_placeholder') || "Original (e.g. gpt-4 or gpt-4*)"}
                                                         className="input input-xs input-bordered flex-1 font-mono text-[11px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600 h-8"
                                                     />
                                                     <div className="w-full sm:w-48">
@@ -1471,9 +2145,10 @@ print(response.text)`;
                         </div>
                     )
                 }
+
                 {/* 多协议支持信息 */}
                 {
-                    appConfig && status.running && (
+                    !configLoading && !configError && appConfig && (
                         <div className="bg-white dark:bg-base-100 rounded-xl shadow-sm border border-gray-100 dark:border-base-200 overflow-hidden">
                             <div className="p-3">
                                 <div className="flex items-center gap-3 mb-3">
@@ -1502,26 +2177,42 @@ print(response.text)`;
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold text-blue-600">{t('proxy.multi_protocol.openai_label')}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1`, 'openai'); }} className="btn btn-ghost btn-xs">
-                                                {copied === 'openai' ? <CheckCircle size={14} /> : <div className="flex items-center gap-1 text-[10px]"><Copy size={12} /> Base</div>}
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                copyToClipboardHandler(`${baseUrl}/v1`, 'openai');
+                                            }} className="btn btn-ghost btn-xs">
+                                                {copied === 'openai' ? <CheckCircle size={14} /> : <div className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-tighter"><Copy size={12} /> {t('proxy.multi_protocol.copy_base', { defaultValue: 'Base' })}</div>}
                                             </button>
                                         </div>
                                         <div className="space-y-1">
                                             <div className="flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 group">
                                                 <code className="text-[10px] opacity-70">/v1/chat/completions</code>
-                                                <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1/chat/completions`, 'openai-chat'); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                    copyToClipboardHandler(`${baseUrl}/v1/chat/completions`, 'openai-chat');
+                                                }} className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {copied === 'openai-chat' ? <CheckCircle size={10} className="text-green-500" /> : <Copy size={10} />}
                                                 </button>
                                             </div>
                                             <div className="flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 group">
                                                 <code className="text-[10px] opacity-70">/v1/completions</code>
-                                                <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1/completions`, 'openai-compl'); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                    copyToClipboardHandler(`${baseUrl}/v1/completions`, 'openai-compl');
+                                                }} className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {copied === 'openai-compl' ? <CheckCircle size={10} className="text-green-500" /> : <Copy size={10} />}
                                                 </button>
                                             </div>
                                             <div className="flex items-center justify-between hover:bg-black/5 dark:hover:bg-white/5 rounded p-0.5 group">
                                                 <code className="text-[10px] opacity-70 font-bold text-blue-500">/v1/responses (Codex)</code>
-                                                <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1/responses`, 'openai-resp'); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                    copyToClipboardHandler(`${baseUrl}/v1/responses`, 'openai-resp');
+                                                }} className="opacity-0 group-hover:opacity-100 transition-opacity">
                                                     {copied === 'openai-resp' ? <CheckCircle size={10} className="text-green-500" /> : <Copy size={10} />}
                                                 </button>
                                             </div>
@@ -1535,7 +2226,11 @@ print(response.text)`;
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold text-purple-600">{t('proxy.multi_protocol.anthropic_label')}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1/messages`, 'anthropic'); }} className="btn btn-ghost btn-xs">
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                copyToClipboardHandler(`${baseUrl}/v1/messages`, 'anthropic');
+                                            }} className="btn btn-ghost btn-xs">
                                                 {copied === 'anthropic' ? <CheckCircle size={14} /> : <Copy size={14} />}
                                             </button>
                                         </div>
@@ -1549,7 +2244,11 @@ print(response.text)`;
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold text-green-600">{t('proxy.multi_protocol.gemini_label')}</span>
-                                            <button onClick={(e) => { e.stopPropagation(); copyToClipboard(`${status.base_url}/v1beta/models`, 'gemini'); }} className="btn btn-ghost btn-xs">
+                                            <button onClick={(e) => {
+                                                e.stopPropagation();
+                                                const baseUrl = status.running ? status.base_url : `http://127.0.0.1:${appConfig.proxy.port || 8045}`;
+                                                copyToClipboardHandler(`${baseUrl}/v1beta/models`, 'gemini');
+                                            }} className="btn btn-ghost btn-xs">
                                                 {copied === 'gemini' ? <CheckCircle size={14} /> : <Copy size={14} />}
                                             </button>
                                         </div>
@@ -1561,9 +2260,10 @@ print(response.text)`;
                     )
                 }
 
+
                 {/* 支持模型与集成 */}
                 {
-                    appConfig && (
+                    !configLoading && !configError && appConfig && (
                         <div className="bg-white dark:bg-base-100 rounded-xl shadow-sm border border-gray-100 dark:border-base-200 overflow-hidden mt-4">
                             <div className="px-4 py-2.5 border-b border-gray-100 dark:border-base-200">
                                 <h2 className="text-base font-bold text-gray-900 dark:text-base-content flex items-center gap-2">
@@ -1602,10 +2302,10 @@ print(response.text)`;
                                                                 className="btn btn-ghost btn-xs text-blue-500"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    copyToClipboard(m.id, `model-${m.id}`);
+                                                                    copyToClipboardHandler(m.id, `model-${m.id}`);
                                                                 }}
                                                             >
-                                                                {copied === `model-${m.id}` ? <CheckCircle size={14} /> : <div className="flex items-center gap-1 text-[10px]"><Copy size={12} /> Copy</div>}
+                                                                {copied === `model-${m.id}` ? <CheckCircle size={14} /> : <div className="flex items-center gap-1 text-[10px] font-bold tracking-tight"><Copy size={12} /> {t('common.copy')}</div>}
                                                             </button>
                                                         </td>
                                                     </tr>
@@ -1633,7 +2333,7 @@ print(response.text)`;
                                             </pre>
                                         </div>
                                         <button
-                                            onClick={() => copyToClipboard(getPythonExample(selectedModelId), 'example-code')}
+                                            onClick={() => copyToClipboardHandler(getPythonExample(selectedModelId), 'example-code')}
                                             className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white opacity-0 group-hover:opacity-100"
                                         >
                                             {copied === 'example-code' ? <CheckCircle size={16} /> : <Copy size={16} />}
@@ -1676,6 +2376,16 @@ print(response.text)`;
                     isDestructive={true}
                     onConfirm={executeClearSessionBindings}
                     onCancel={() => setIsClearBindingsConfirmOpen(false)}
+                />
+
+                <ModalDialog
+                    isOpen={isClearRateLimitsConfirmOpen}
+                    title={t('proxy.dialog.clear_rate_limits_title') || '清除限流记录'}
+                    message={t('proxy.dialog.clear_rate_limits_confirm') || '确定要清除所有本地限流记录吗？'}
+                    type="confirm"
+                    isDestructive={true}
+                    onConfirm={executeClearRateLimits}
+                    onCancel={() => setIsClearRateLimitsConfirmOpen(false)}
                 />
             </div >
         </div >

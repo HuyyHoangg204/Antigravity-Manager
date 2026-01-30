@@ -2,17 +2,22 @@ import i18n from '../i18n';
 import { request as invoke } from '../utils/request';
 import { Account, QuotaData, DeviceProfile, DeviceProfileVersion } from '../types/account';
 
-// 检查 Tauri 环境
+// 检查环境 (可选)
 function ensureTauriEnvironment() {
-    // 只检查 invoke 函数是否可用
-    // 不检查 __TAURI__ 对象,因为在某些 Tauri 版本中可能不存在
+    // Web 模式下 request 也是一个 function，所以这里不应抛错
     if (typeof invoke !== 'function') {
         throw new Error(i18n.t('common.tauri_api_not_loaded'));
     }
 }
 
 export async function listAccounts(): Promise<Account[]> {
-    return await invoke('list_accounts');
+    const response = await invoke<any>('list_accounts');
+    // 如果返回的是对象格式 { accounts: [...] }, 则取其 accounts 属性
+    if (response && typeof response === 'object' && Array.isArray(response.accounts)) {
+        return response.accounts;
+    }
+    // 否则直接返回响应内容（假设为数组）
+    return response || [];
 }
 
 export async function getCurrentAccount(): Promise<Account | null> {

@@ -4,10 +4,9 @@ use serde_json::json;
 use crate::models::QuotaData;
 use crate::modules::config;
 
-const QUOTA_API_URL: &str = "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels";
-const USER_AGENT: &str = "antigravity/1.11.3 Darwin/arm64";
+const QUOTA_API_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
 
-/// 临界值重试阈值：当配额达到 95% 时认为接近恢复
+/// Critical retry threshold: considered near recovery when quota reaches 95%
 const NEAR_READY_THRESHOLD: i32 = 95;
 const MAX_RETRIES: u32 = 3;
 const RETRY_DELAY_SECS: u64 = 30;
@@ -53,18 +52,19 @@ struct Tier {
     slug: Option<String>,
 }
 
-/// 创建配置好的 HTTP Client
+/// Get shared HTTP Client (15s timeout)
 fn create_client() -> reqwest::Client {
-    crate::utils::http::create_client(15)
+    crate::utils::http::get_client()
 }
 
+/// Get shared HTTP Client (60s timeout)
 fn create_warmup_client() -> reqwest::Client {
-    crate::utils::http::create_client(60) // 60 秒超时
+    crate::utils::http::get_long_client()
 }
 
-const CLOUD_CODE_BASE_URL: &str = "https://cloudcode-pa.googleapis.com";
+const CLOUD_CODE_BASE_URL: &str = "https://daily-cloudcode-pa.sandbox.googleapis.com";
 
-/// 获取项目 ID 和订阅类型
+/// Fetch project ID and subscription tier
 async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, Option<String>) {
     let client = create_client();
     let meta = json!({"metadata": {"ideType": "ANTIGRAVITY"}});
@@ -73,7 +73,7 @@ async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, O
         .post(format!("{}/v1internal:loadCodeAssist", CLOUD_CODE_BASE_URL))
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", access_token))
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(reqwest::header::USER_AGENT, "antigravity/windows/amd64")
+        .header(reqwest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
         .json(&meta)
         .send()
         .await;
@@ -84,14 +84,14 @@ async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, O
                 if let Ok(data) = res.json::<LoadProjectResponse>().await {
                     let project_id = data.project_id.clone();
                     
-                    // 核心逻辑：优先从 paid_tier 获取订阅 ID，这比 current_tier 更能反映真实账户权益
+                    // Core logic: Priority to subscription ID from paid_tier, which better reflects actual account benefits than current_tier
                     let subscription_tier = data.paid_tier
                         .and_then(|t| t.id)
                         .or_else(|| data.current_tier.and_then(|t| t.id));
                     
                     if let Some(ref tier) = subscription_tier {
                         crate::modules::logger::log_info(&format!(
-                            "📊 [{}] 订阅识别成功: {}", email, tier
+                            "📊 [{}] Subscription identified successfully: {}", email, tier
                         ));
                     }
                     
@@ -99,24 +99,24 @@ async fn fetch_project_id(access_token: &str, email: &str) -> (Option<String>, O
                 }
             } else {
                 crate::modules::logger::log_warn(&format!(
-                    "⚠️  [{}] loadCodeAssist 失败: Status: {}", email, res.status()
+                    "⚠️  [{}] loadCodeAssist failed: Status: {}", email, res.status()
                 ));
             }
         }
         Err(e) => {
-            crate::modules::logger::log_error(&format!("❌ [{}] loadCodeAssist 网络错误: {}", email, e));
+            crate::modules::logger::log_error(&format!("❌ [{}] loadCodeAssist network error: {}", email, e));
         }
     }
     
     (None, None)
 }
 
-/// 查询账号配额的统一入口
+/// Unified entry point for fetching account quota
 pub async fn fetch_quota(access_token: &str, email: &str) -> crate::error::AppResult<(QuotaData, Option<String>)> {
     fetch_quota_with_cache(access_token, email, None).await
 }
 
-/// 带缓存的配额查询
+/// Fetch quota with cache support
 pub async fn fetch_quota_with_cache(
     access_token: &str,
     email: &str,
@@ -124,7 +124,7 @@ pub async fn fetch_quota_with_cache(
 ) -> crate::error::AppResult<(QuotaData, Option<String>)> {
     use crate::error::AppError;
     
-    // 优化：如果有缓存的 project_id，跳过 loadCodeAssist 调用以节省 API 配额
+    // Optimization: Skip loadCodeAssist call if project_id is cached to save API quota
     let (project_id, subscription_tier) = if let Some(pid) = cached_project_id {
         (Some(pid.to_string()), None)
     } else {
@@ -139,27 +139,26 @@ pub async fn fetch_quota_with_cache(
     });
     
     let url = QUOTA_API_URL;
-    let max_retries = 3;
     let mut last_error: Option<AppError> = None;
 
-    for attempt in 1..=max_retries {
+    for attempt in 1..=MAX_RETRIES {
         match client
             .post(url)
             .bearer_auth(access_token)
-            .header("User-Agent", USER_AGENT)
+            .header(reqwest::header::USER_AGENT, crate::constants::USER_AGENT.as_str())
             .json(&json!(payload))
             .send()
             .await
         {
             Ok(response) => {
-                // 将 HTTP 错误状态转换为 AppError
+                // Convert HTTP error status to AppError
                 if let Err(_) = response.error_for_status_ref() {
                     let status = response.status();
                     
-                    // ✅ 特殊处理 403 Forbidden - 直接返回,不重试
+                    // ✅ Special handling for 403 Forbidden - return directly, no retry
                     if status == reqwest::StatusCode::FORBIDDEN {
                         crate::modules::logger::log_warn(&format!(
-                            "账号无权限 (403 Forbidden),标记为 forbidden 状态"
+                            "Account unauthorized (403 Forbidden), marking as forbidden"
                         ));
                         let mut q = QuotaData::new();
                         q.is_forbidden = true;
@@ -167,16 +166,16 @@ pub async fn fetch_quota_with_cache(
                         return Ok((q, project_id.clone()));
                     }
                     
-                    // 其他错误继续重试逻辑
-                    if attempt < max_retries {
+                    // Continue retry logic for other errors
+                    if attempt < MAX_RETRIES {
                          let text = response.text().await.unwrap_or_default();
-                         crate::modules::logger::log_warn(&format!("API 错误: {} - {} (尝试 {}/{})", status, text, attempt, max_retries));
+                         crate::modules::logger::log_warn(&format!("API Error: {} - {} (Attempt {}/{})", status, text, attempt, MAX_RETRIES));
                          last_error = Some(AppError::Unknown(format!("HTTP {} - {}", status, text)));
                          tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                          continue;
                     } else {
                          let text = response.text().await.unwrap_or_default();
-                         return Err(AppError::Unknown(format!("API 错误: {} - {}", status, text)));
+                         return Err(AppError::Unknown(format!("API Error: {} - {}", status, text)));
                     }
                 }
 
@@ -187,8 +186,8 @@ pub async fn fetch_quota_with_cache(
                 
                 let mut quota_data = QuotaData::new();
                 
-                // 使用 debug 级别记录详细信息，避免控制台噪音
-                tracing::debug!("Quota API 返回了 {} 个模型", quota_response.models.len());
+                // Use debug level for detailed info to avoid console noise
+                tracing::debug!("Quota API returned {} models", quota_response.models.len());
 
                 for (name, info) in quota_response.models {
                     if let Some(quota_info) = info.quota_info {
@@ -198,44 +197,44 @@ pub async fn fetch_quota_with_cache(
                         
                         let reset_time = quota_info.reset_time.unwrap_or_default();
                         
-                        // 只保存我们关心的模型
+                        // Only keep models we care about
                         if name.contains("gemini") || name.contains("claude") {
                             quota_data.add_model(name, percentage, reset_time);
                         }
                     }
                 }
                 
-                // 设置订阅类型
+                // Set subscription tier
                 quota_data.subscription_tier = subscription_tier.clone();
                 
                 return Ok((quota_data, project_id.clone()));
             },
             Err(e) => {
-                crate::modules::logger::log_warn(&format!("请求失败: {} (尝试 {}/{})", e, attempt, max_retries));
+                crate::modules::logger::log_warn(&format!("Request failed: {} (Attempt {}/{})", e, attempt, MAX_RETRIES));
                 last_error = Some(AppError::Network(e));
-                if attempt < max_retries {
+                if attempt < MAX_RETRIES {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }
         }
     }
     
-    Err(last_error.unwrap_or_else(|| AppError::Unknown("配额查询失败".to_string())))
+    Err(last_error.unwrap_or_else(|| AppError::Unknown("Quota fetch failed".to_string())))
 }
 
-/// 查询账号配额逻辑
+/// Internal fetch quota logic
 #[allow(dead_code)]
 pub async fn fetch_quota_inner(access_token: &str, email: &str) -> crate::error::AppResult<(QuotaData, Option<String>)> {
     fetch_quota_with_cache(access_token, email, None).await
 }
 
-/// 批量查询所有账号配额 (备用功能)
+/// Batch fetch all account quotas (backup functionality)
 #[allow(dead_code)]
 pub async fn fetch_all_quotas(accounts: Vec<(String, String)>) -> Vec<(String, crate::error::AppResult<QuotaData>)> {
     let mut results = Vec::new();
     
     for (account_id, access_token) in accounts {
-        // 在批量查询中，我们将 account_id 传入以供日志标识
+        // In batch queries, pass account_id for log identification
         let result = fetch_quota(&access_token, &account_id).await.map(|(q, _)| q);
         results.push((account_id, result));
     }
@@ -243,31 +242,31 @@ pub async fn fetch_all_quotas(accounts: Vec<(String, String)>) -> Vec<(String, c
     results
 }
 
-/// 获取有效 token（自动刷新过期的）
+/// Get valid token (auto-refresh if expired)
 pub async fn get_valid_token_for_warmup(account: &crate::models::account::Account) -> Result<(String, String), String> {
     let mut account = account.clone();
     
-    // 检查并自动刷新 token
+    // Check and auto-refresh token
     let new_token = crate::modules::oauth::ensure_fresh_token(&account.token).await?;
     
-    // 如果 token 改变了（意味着刷新了），保存它
+    // If token changed (meant refreshed), save it
     if new_token.access_token != account.token.access_token {
         account.token = new_token;
         if let Err(e) = crate::modules::account::save_account(&account) {
-            crate::modules::logger::log_warn(&format!("[Warmup] 保存刷新后的 Token 失败: {}", e));
+            crate::modules::logger::log_warn(&format!("[Warmup] Failed to save refreshed token: {}", e));
         } else {
-            crate::modules::logger::log_info(&format!("[Warmup] 成功为 {} 刷新并保存了新 Token", account.email));
+            crate::modules::logger::log_info(&format!("[Warmup] Successfully refreshed and saved new token for {}", account.email));
         }
     }
     
-    // 获取 project_id
+    // Fetch project_id
     let (project_id, _) = fetch_project_id(&account.token.access_token, &account.email).await;
     let final_pid = project_id.unwrap_or_else(|| "bamboo-precept-lgxtn".to_string());
     
     Ok((account.token.access_token, final_pid))
 }
 
-/// 通过代理内部 API 发送预热请求
+/// Send warmup request via proxy internal API
 pub async fn warmup_model_directly(
     access_token: &str,
     model_name: &str,
@@ -275,7 +274,7 @@ pub async fn warmup_model_directly(
     email: &str,
     percentage: i32,
 ) -> bool {
-    // 获取当前配置的代理端口
+    // Get currently configured proxy port
     let port = config::load_app_config()
         .map(|c| c.proxy.port)
         .unwrap_or(8045);
@@ -315,7 +314,7 @@ pub async fn warmup_model_directly(
     }
 }
 
-/// 智能预热所有账号
+/// Smart warmup for all accounts
 pub async fn warm_up_all_accounts() -> Result<String, String> {
     let mut retry_count = 0;
     
@@ -323,15 +322,15 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
         let target_accounts = crate::modules::account::list_accounts().unwrap_or_default();
 
         if target_accounts.is_empty() {
-            return Ok("没有可用账号".to_string());
+            return Ok("No accounts available".to_string());
         }
 
-        crate::modules::logger::log_info(&format!("[Warmup] 开始筛选 {} 个账号的模型...", target_accounts.len()));
+        crate::modules::logger::log_info(&format!("[Warmup] Screening models for {} accounts...", target_accounts.len()));
 
         let mut warmup_items = Vec::new();
         let mut has_near_ready_models = false;
 
-        // 并发获取配额（每批5个）
+        // Concurrently fetch quotas (batch size 5)
         let batch_size = 5;
         for batch in target_accounts.chunks(batch_size) {
             let mut handles = Vec::new();
@@ -353,7 +352,7 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
                     let mut account_warmed_series = std::collections::HashSet::new();
                     for m in fresh_quota.models {
                         if m.percentage >= 100 {
-                            let model_to_ping = if m.name == "gemini-2.5-flash" { "gemini-3-flash".to_string() } else { m.name.clone() };
+                            let model_to_ping = m.name.clone();
                             
                             match model_to_ping.as_str() {
                                 "gemini-3-flash" | "claude-sonnet-4-5" | "gemini-3-pro-high" | "gemini-3-pro-image" => {
@@ -375,7 +374,7 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
         if !warmup_items.is_empty() {
             let total_before = warmup_items.len();
             
-            // 过滤掉4小时内已预热的模型
+            // Filter out models warmed up within 4 hours
             warmup_items.retain(|(email, model, _, _, _)| {
                 let history_key = format!("{}:{}:100", email, model);
                 !crate::modules::scheduler::check_cooldown(&history_key, 14400)
@@ -383,8 +382,8 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
             
             if warmup_items.is_empty() {
                 let skipped = total_before;
-                crate::modules::logger::log_info(&format!("[Warmup] 返回前端: 所有模型均在冷却期内，跳过 {} 个", skipped));
-                return Ok(format!("所有模型均在4小时冷却期内，已跳过 {} 个", skipped));
+                crate::modules::logger::log_info(&format!("[Warmup] Returning to frontend: All models in cooldown, skipped {}", skipped));
+                return Ok(format!("All models are in 4-hour cooldown, skipped {} items", skipped));
             }
             
             let total = warmup_items.len();
@@ -392,13 +391,13 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
             
             if skipped > 0 {
                 crate::modules::logger::log_info(&format!(
-                    "[Warmup] 已跳过 {} 个冷却期内的模型，将预热 {} 个",
+                    "[Warmup] Skipped {} models in cooldown, preparing to warmup {}",
                     skipped, total
                 ));
             }
             
             crate::modules::logger::log_info(&format!(
-                "[Warmup] 🔥 启动手动预热: {} 个模型",
+                "[Warmup] 🔥 Starting manual warmup for {} models",
                 total
             ));
             
@@ -440,43 +439,42 @@ pub async fn warm_up_all_accounts() -> Result<String, String> {
                     }
                 }
                 
-                crate::modules::logger::log_info(&format!("[Warmup] 预热任务完成: 成功 {}/{}", success, total));
+                crate::modules::logger::log_info(&format!("[Warmup] Warmup task completed: success {}/{}", success, total));
                 tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 let _ = crate::modules::account::refresh_all_quotas_logic().await;
             });
-            crate::modules::logger::log_info(&format!("[Warmup] 返回前端: 已启动 {} 个模型的预热任务", total));
-            return Ok(format!("已启动 {} 个模型的预热任务", total));
+            crate::modules::logger::log_info(&format!("[Warmup] Returning to frontend: Warmup task triggered for {} models", total));
+            return Ok(format!("Warmup task triggered for {} models", total));
         }
 
         if has_near_ready_models && retry_count < MAX_RETRIES {
             retry_count += 1;
-            crate::modules::logger::log_info(&format!("[Warmup] 检测到临界恢复模型，等待 {}s 后重试 ({}/{})", RETRY_DELAY_SECS, retry_count, MAX_RETRIES));
+            crate::modules::logger::log_info(&format!("[Warmup] Critical recovery model detected, waiting {}s to retry ({}/{})", RETRY_DELAY_SECS, retry_count, MAX_RETRIES));
             tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
             continue;
         }
 
-        return Ok("没有模型需要预热".to_string());
+        return Ok("No models need warmup".to_string());
     }
 }
 
-/// 单账号预热
+/// Warmup for single account
 pub async fn warm_up_account(account_id: &str) -> Result<String, String> {
     let accounts = crate::modules::account::list_accounts().unwrap_or_default();
-    let account_owned = accounts.iter().find(|a| a.id == account_id).cloned().ok_or_else(|| "账号未找到".to_string())?;
+    let account_owned = accounts.iter().find(|a| a.id == account_id).cloned().ok_or_else(|| "Account not found".to_string())?;
     
     let email = account_owned.email.clone();
     let (token, pid) = get_valid_token_for_warmup(&account_owned).await?;
-    let (fresh_quota, _) = fetch_quota_with_cache(&token, &email, Some(&pid)).await.map_err(|e| format!("查询配额失败: {}", e))?;
+    let (fresh_quota, _) = fetch_quota_with_cache(&token, &email, Some(&pid)).await.map_err(|e| format!("Failed to fetch quota: {}", e))?;
     
     let mut models_to_warm = Vec::new();
     let mut warmed_series = std::collections::HashSet::new();
 
     for m in fresh_quota.models {
         if m.percentage >= 100 {
-            // 1. 映射逻辑
-            let model_name = if m.name == "gemini-2.5-flash" { "gemini-3-flash".to_string() } else { m.name.clone() };
+            let model_name = m.name.clone();
             
-            // 2. 严格白名单过滤
+            // 2. Strict whitelist filtering
             match model_name.as_str() {
                 "gemini-3-flash" | "claude-sonnet-4-5" | "gemini-3-pro-high" | "gemini-3-pro-image" => {
                     if !warmed_series.contains(&model_name) {
@@ -490,18 +488,22 @@ pub async fn warm_up_account(account_id: &str) -> Result<String, String> {
     }
 
     if models_to_warm.is_empty() {
-        return Ok("无需预热".to_string());
+        return Ok("No warmup needed".to_string());
     }
 
     let warmed_count = models_to_warm.len();
     
     tokio::spawn(async move {
         for (name, pct) in models_to_warm {
-            warmup_model_directly(&token, &name, &pid, &email, pct).await;
+            if warmup_model_directly(&token, &name, &pid, &email, pct).await {
+                let history_key = format!("{}:{}:100", email, name);
+                let now_ts = chrono::Utc::now().timestamp();
+                crate::modules::scheduler::record_warmup_history(&history_key, now_ts);
+            }
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         }
         let _ = crate::modules::account::refresh_all_quotas_logic().await;
     });
 
-    Ok(format!("成功触发 {} 个系列的模型预热", warmed_count))
+    Ok(format!("Successfully triggered warmup for {} model series", warmed_count))
 }

@@ -3,6 +3,7 @@
         "loading": "加载中...",
         "load_more": "加载更多",
         "add": "添加",
+        "copy": "复制",
         "action": "操作",
         "save": "保存",
         "saved": "保存成功",
@@ -31,13 +32,16 @@
         "enabled": "已启用",
         "disabled": "已禁用",
         "tauri_api_not_loaded": "Tauri API 未正确加载,请重启应用",
-        "environment_error": "环境错误: {{error}}"
+        "environment_error": "环境错误: {{error}}",
+        "submit": "提交"
     },
     "nav": {
         "dashboard": "仪表盘",
         "chat": "AI 对话",
         "accounts": "账号管理",
         "proxy": "API 反代",
+        "call_records": "流量日志",
+        "token_stats": "Token 统计",
         "settings": "设置",
         "theme_to_dark": "切换到深色模式",
         "theme_to_light": "切换到浅色模式",
@@ -52,7 +56,13 @@
         "switch_to_turkish": "切换到土耳其文",
         "switch_to_turkish_short": "TR",
         "switch_to_vietnamese": "切换到越南文",
-        "switch_to_vietnamese_short": "VI"
+        "switch_to_vietnamese_short": "VI",
+        "switch_to_russian": "切换到俄文",
+        "switch_to_russian_short": "RU",
+        "switch_to_portuguese": "切换到葡萄牙文",
+        "switch_to_portuguese_short": "PT",
+        "switch_to_korean": "切换到韩语",
+        "switch_to_korean_short": "KO"
     },
     "dashboard": {
         "hello": "你好, 用户 👋",
@@ -99,6 +109,11 @@
         "refresh_all": "刷新所有",
         "refresh_selected": "刷新 ({{count}})",
         "export_selected": "导出 ({{count}})",
+        "import_json": "导入",
+        "import_success": "成功导入 {{count}} 个账号",
+        "import_partial": "导入完成: {{success}} 个成功, {{fail}} 个失败",
+        "import_fail": "导入失败: {{error}}",
+        "import_invalid_format": "无效的 JSON 格式，请确保文件包含 email 和 refresh_token 字段",
         "delete_selected": "删除 ({{count}})",
         "current": "当前",
         "current_badge": "当前",
@@ -122,11 +137,49 @@
         "switch_to": "切换到此账号",
         "actions": "操作",
         "device_fingerprint": "设备指纹",
+        "device_fingerprint_dialog": {
+            "title": "设备指纹",
+            "operations": "设备指纹操作",
+            "generate_and_bind": "生成并绑定",
+            "restore_original": "恢复原始",
+            "open_storage_directory": "打开存储目录",
+            "current_storage": "当前存储",
+            "effective": "已生效",
+            "current_storage_desc": "读取自 storage.json（切换账号时应用绑定后更新）",
+            "account_binding": "账号绑定",
+            "pending_application": "待应用",
+            "account_binding_desc": "生成/恢复后保存为绑定，切换账号时写入 storage.json",
+            "historical_fingerprints": "历史指纹（可选恢复/删除）",
+            "no_history": "暂无历史",
+            "current": "当前",
+            "restore": "恢复",
+            "delete_version": "删除此版本",
+            "confirm_generate_title": "确认生成并绑定？",
+            "confirm_generate_desc": "将生成一套新的设备指纹并设置为当前指纹。确认继续？",
+            "confirm_restore_title": "确认恢复原始指纹？",
+            "confirm_restore_desc": "将恢复为原始指纹并覆盖当前指纹。确认继续？",
+            "cancel": "取消",
+            "confirm": "确认",
+            "processing": "处理中...",
+            "loading": "加载中...",
+            "failed_to_load_device_info": "加载设备信息失败",
+            "generation_failed": "生成失败",
+            "binding_failed": "绑定失败",
+            "restoration_failed": "恢复失败",
+            "deletion_failed": "删除失败",
+            "directory_open_failed": "无法打开目录",
+            "generated_and_bound": "已生成并绑定",
+            "restored": "已恢复",
+            "deleted": "已删除",
+            "directory_opened": "已打开设备存储目录",
+            "original_fingerprint_not_found": "未找到原始指纹"
+        },
         "warmup_all": "一键预热",
         "warmup_selected": "预热 ({{count}})",
         "warmup_this": "预热该账号",
         "warmup_now": "立即预热",
         "warmup_batch_triggered": "已成功为 {{count}} 个账号触发预热任务",
+        "quota_protected": "受保护",
         "details": {
             "title": "配额详情"
         },
@@ -150,7 +203,10 @@
                 "copy_link": "复制授权链接",
                 "copied": "已复制",
                 "link_label": "授权链接",
-                "link_click_to_copy": "点击复制"
+                "link_click_to_copy": "点击复制",
+                "manual_hint": "浏览器没有自动跳转？请在此处粘贴回调链接或 Authorization Code：",
+                "manual_placeholder": "粘贴回调链接或 Code...",
+                "error_no_flow": "请先点击“开始 OAuth 授权”"
             },
             "token": {
                 "label": "Refresh Token",
@@ -267,6 +323,10 @@
             "example": "示例：设置 {{percentage}}% 时，{{total}} 次配额的账号剩余 ≤ {{threshold}} 次时将被自动禁用",
             "auto_restore_info": "配额重置后将自动重新启用账号"
         },
+        "pinned_quota_models": {
+            "title": "配额关注列表",
+            "desc": "选择要在账号列表外层显示的模型配额，未选中的模型只在详情弹窗中显示"
+        },
         "proxy": {
             "title": "代理设置"
         },
@@ -299,7 +359,17 @@
             "clear_logs": "清理日志缓存",
             "clear_logs_title": "清理日志确认",
             "clear_logs_msg": "确定要清理所有日志缓存文件吗？",
-            "logs_cleared": "日志缓存已清理"
+            "logs_cleared": "日志缓存已清理",
+            "http_api_title": "HTTP API 服务",
+            "http_api_desc": "为外部程序（如 VS Code 插件）提供本地 HTTP 接口。",
+            "http_api_enabled": "启用 HTTP API",
+            "http_api_enabled_desc": "启用后，外部程序可通过 HTTP 接口管理账号",
+            "http_api_port": "监听端口",
+            "http_api_port_desc": "修改端口后需要重启应用才能生效。如遇端口冲突，请更换为其他未被占用的端口。",
+            "http_api_port_placeholder": "默认端口 19527",
+            "http_api_port_invalid": "端口号无效（范围：1024-65535）",
+            "http_api_settings_saved": "HTTP API 设置已保存，重启应用后生效",
+            "http_api_restart_required": "⚠️ 需要重启应用后生效"
         },
         "about": {
             "title": "关于",
@@ -370,6 +440,13 @@
             "warning_key": "注意：请妥善保管您的 API 密钥，不要泄露给他人。",
             "api_key_invalid": "API 密钥格式无效,必须以 sk- 开头且长度至少 10 个字符",
             "api_key_updated": "API 密钥已更新",
+            "admin_password": "Web UI 管理后台密码",
+            "admin_password_tooltip": "用于登录 Web 管理后台的密码。如果为空，则默认使用 API 密钥（API Key）。",
+            "admin_password_default": "（同 API 密钥）",
+            "admin_password_placeholder": "输入新密码，留空则使用 API 密钥",
+            "admin_password_hint": "提示：在 Docker/Web 部署场景中，您可以设置一个独立的登录密码，提高 API 密钥的安全性。",
+            "admin_password_short": "密码太短（最少 4 个字符）",
+            "admin_password_updated": "Web UI 登录密码已更新",
             "auth": {
                 "title": "访问授权",
                 "title_tooltip": "控制代理是否需要鉴权，以及哪些路由需要提供 API 密钥。",
@@ -417,10 +494,10 @@
                     "advanced_tooltip": "可选的精确匹配覆盖规则：如果 incoming model 字符串与规则键完全一致，则替换为对应的 z.ai 模型 ID。",
                     "from_label": "incoming model",
                     "to_label": "z.ai 模型",
-                    "from_placeholder": "例如：claude-opus-4-5-thinking",
-                    "to_placeholder": "例如：glm-4.7",
                     "add_rule": "添加",
-                    "empty": "未配置任何覆盖规则。"
+                    "empty": "尚未配置自定义替换规则。",
+                    "from_placeholder": "源模型 (如 claude-3-opus)",
+                    "to_placeholder": "映射至 (如 glm-4)"
                 },
                 "modes": {
                     "off": "关闭",
@@ -445,7 +522,7 @@
             },
             "request_timeout": "请求超时",
             "request_timeout_tooltip": "代理等待上游响应的最大时间（秒），包含流式输出。长文本/长推理可适当调大；修改后需重启生效。",
-            "request_timeout_hint": "默认 120 秒，范围 30-3600 秒。修改后需重启服务生效。",
+            "request_timeout_hint": "默认 120 秒，范围 30-7200 秒。修改后需重启服务生效。",
             "enable_logging": "启用请求日志",
             "enable_logging_hint": "记录历史记录以便调试 (微小性能损耗)",
             "upstream_proxy": {
@@ -454,7 +531,9 @@
                 "enable": "启用上游代理",
                 "url": "代理地址",
                 "url_placeholder": "例如: http://127.0.0.1:7890 或 socks5://127.0.0.1:7890",
-                "tip": "支持 HTTP、HTTPS 和 SOCKS5 协议。"
+                "tip": "支持 HTTP、HTTPS 和 SOCKS5 协议。",
+                "validation_error": "启用上游代理时必须填写代理地址",
+                "restart_hint": "代理配置已保存，重启应用后生效"
             },
             "scheduling": {
                 "title": "账号轮换与会话调度",
@@ -475,14 +554,75 @@
                 "max_wait": "最大等待时长 (秒)",
                 "max_wait_tooltip": "仅在“缓存优先”模式下生效：如果账号限流重置时间小于此值，则原地等待而非切换账号。",
                 "clear_bindings": "清除会话绑定",
-                "clear_bindings_tooltip": "立即断开所有会话与账号的绑定关系，强制下一次请求重新分配账号。"
+                "clear_bindings_tooltip": "立即断开所有会话与账号的绑定关系，强制下一次请求重新分配账号。",
+                "clear_rate_limits": "清除限流记录",
+                "clear_rate_limits_tooltip": "立即清除所有账号的本地限流记录，强制下一次请求尝试直接调用上游。"
+            },
+            "circuit_breaker": {
+                "title": "自适应熔断器",
+                "tooltip": "当账号因配额耗尽反复失败时，自动增加锁定时间。这可以防止在死账号上浪费 API 调用，同时允许瞬态错误快速恢复。",
+                "backoff_levels": "退避等级 (秒)",
+                "input_placeholder": "输入退避时长 (秒)，以逗号分隔",
+                "level": "等级 {{level}}",
+                "invalid_format": "格式无效。请使用逗号分隔的数字 (例如 60, 300)",
+                "clear_records": "清除所有限流记录"
             },
             "experimental": {
                 "title": "实验性设置 (Experimental)",
                 "title_tooltip": "探索性功能，可能在未来版本中调整或移除。",
                 "enable_usage_scaling": "启用用量缩放",
-                "enable_usage_scaling_tooltip": "针对 Claude 兼容协议。当总输入超过 30k Token 时开启激进缩放，防止在大上下文下频繁触发客户端压缩。注意：开启后客户端显示的用量不再代表实际计费点数。"
+                "enable_usage_scaling_tooltip": "针对 Claude 兼容协议。当总输入超过 30k Token 时开启激进缩放，防止在大上下文下频繁触发客户端压缩。注意：开启后客户端显示的用量不再代表实际计费点数。",
+                "context_compression_threshold_l1": "L1 压缩阈值 (工具记录清理)",
+                "context_compression_threshold_l1_tooltip": "清理旧的工具调用记录以节省空间。建议值: 0.4 (40%)",
+                "context_compression_threshold_l2": "L2 压缩阈值 (思维链压缩)",
+                "context_compression_threshold_l2_tooltip": "压缩早期的思维链内容，保留签名。建议值: 0.55 (55%)",
+                "context_compression_threshold_l3": "L3 压缩阈值 (摘要重置)",
+                "context_compression_threshold_l3_tooltip": "强制生成 XML 状态摘要并重置会话。这是最省 token 的手段。建议值: 0.7 (70%)"
             }
+        },
+        "cloudflared": {
+            "title": "公网访问 (Cloudflared)",
+            "subtitle": "通过 Cloudflare 隧道将本地服务暴露到公网",
+            "not_installed": "Cloudflared 未安装",
+            "install_hint": "Cloudflared 是 Cloudflare 提供的免费隧道工具,可将本地反代服务暴露到公网,无需公网IP或端口映射。点击下方按钮一键下载安装。",
+            "install": "一键安装",
+            "installing": "安装中...",
+            "install_success": "Cloudflared 安装成功",
+            "install_failed": "安装失败: {{error}}",
+            "installed": "已安装",
+            "version": "版本",
+            "mode_label": "隧道模式",
+            "mode_quick": "快速隧道",
+            "mode_quick_desc": "自动生成临时 URL (*.trycloudflare.com),无需账号,重启后URL会变化",
+            "mode_auth": "命名隧道",
+            "mode_auth_desc": "使用 Cloudflare 账号 Token,支持自定义域名,URL固定不变",
+            "token": "隧道 Token",
+            "token_placeholder": "粘贴您的 Cloudflare Tunnel Token",
+            "token_hint": "从 Cloudflare Zero Trust 控制台获取",
+            "token_required": "命名隧道模式需要提供 Token",
+            "use_http2": "使用 HTTP/2",
+            "use_http2_desc": "兼容性更好,推荐中国大陆用户开启",
+            "status_label": "隧道状态",
+            "status_stopped": "未运行",
+            "status_starting": "启动中...",
+            "status_running": "运行中",
+            "status_stopping": "停止中...",
+            "status_error": "错误",
+            "public_url": "公网地址",
+            "public_url_placeholder": "隧道启动后将显示公网访问地址",
+            "copy_url": "复制地址",
+            "url_copied": "地址已复制",
+            "start_tunnel": "启动隧道",
+            "stop_tunnel": "停止隧道",
+            "running": "隧道运行中",
+            "started": "隧道已启动",
+            "stopped": "隧道已停止",
+            "start_failed": "启动失败: {{error}}",
+            "stop_failed": "停止失败: {{error}}",
+            "require_proxy_running": "请先启动本地反代服务,再开启隧道",
+            "connection_info": "连接信息",
+            "local_port": "本地端口",
+            "tunnel_protocol": "隧道协议"
         },
         "example": {
             "title": "使用示例",
@@ -501,7 +641,9 @@
             "regenerate_key_title": "重新生成 API Key",
             "regenerate_key_msg": "确定要重新生成 API Key 吗？旧的 Key 将立即失效。",
             "clear_bindings_title": "清除会话绑定",
-            "clear_bindings_msg": "确定要清除所有会话与账号的绑定映射吗？"
+            "clear_bindings_msg": "确定要清除所有会话与账号的绑定映射吗？",
+            "clear_rate_limits_title": "清除限流记录",
+            "clear_rate_limits_confirm": "确定要清除所有本地限流记录吗？"
         },
         "model": {
             "flash": "极速响应",
@@ -546,6 +688,10 @@
             "title": "模型路由中心 (Model Router)",
             "subtitle": "按“规格家族”统一路由 OpenAI/Claude 模型，或添加最高优先级的“精确映射”。\n注意：Claude 原生直通模型（claude-opus-4-5-thinking 等 3 个）默认透传，需在“专家精确映射”中添加规则才能修改。",
             "subtitle_simple": "通过通配符或精确映射自定义模型路由规则",
+            "background_task_title": "后台任务模型",
+            "background_task_desc": "用于 Claude CLI 的标题生成、摘要提取等后台自动化任务 (默认: gemini-2.5-flash)",
+            "use_default": "使用系统默认",
+            "current_model": "当前模型",
             "apply_presets": "应用预设映射",
             "presets_applied": "预设映射已应用",
             "custom_mappings": "自定义映射 (Custom Mappings)",
@@ -594,15 +740,16 @@
             "no_custom_mapping": "暂无自定义精确映射",
             "gemini3_only_warning": "⚠️ 仅支持 Gemini 3 系列",
             "default_suffix": "（默认）",
-            "select_target_model": "选择目标模型"
+            "select_target_model": "选择目标模型",
+            "original_placeholder": "原始名 (如 gpt-4 或 gpt-4*)"
         },
         "examples": {
             "title": "使用示例"
         },
         "multi_protocol": {
             "title": "多协议支持 (Multi-Protocol Support)",
-            "subtitle": "协议支持",
-            "description": "反代服务支持 OpenAI 和 Anthropic 两种 API 格式，满足不同工具需求",
+            "subtitle": "快速同步 API 地址与密钥到本地 AI 工具",
+            "description": "反代服务支持 OpenAI、Anthropic 和 Gemini 协议，满足不同工具的集成需求",
             "openai_label": "OpenAI 协议",
             "anthropic_label": "Anthropic 协议",
             "openai_tools": "Cherry Studio, NextChat",
@@ -610,7 +757,8 @@
             "gemini_label": "Gemini 协议",
             "gemini_tools": "Google AI SDK, LangChain",
             "quick_integration": "快速集成 (Quick Integration)",
-            "click_tip": "👆 点击左侧任意模型以更新代码"
+            "click_tip": "👆 点击模型以更新代码示例",
+            "copy_base": "复制 Base"
         },
         "supported_models": {
             "title": "支持模型与集成 (Supported Models & Integration)",
@@ -618,6 +766,35 @@
             "model_id": "模型 ID",
             "description": "描述",
             "action": "操作"
+        },
+        "cli_sync": {
+            "title": "CLI 配置一键同步",
+            "subtitle": "快速将当前 API 服务地址与 API 密钥同步到本地 AI CLI 工具中",
+            "card_title": "{{name}} 配置",
+            "status": {
+                "not_installed": "未检测到安装",
+                "installed": "v{{version}}",
+                "synced": "已指向本项目",
+                "not_synced": "未同步",
+                "detecting": "检测中...",
+                "current_base_url": "当前接口地址 (Base URL)"
+            },
+            "btn_sync": "立即同步配置",
+            "btn_view": "查看当前配置",
+            "btn_restore": "恢复默认配置",
+            "btn_restore_backup": "恢复原有配置",
+            "restore_confirm": "确定要将 {{name}} 的配置恢复为官方默认地址吗？",
+            "restore_backup_confirm": "检测到旧的配置文件备份，确定要还原吗？",
+            "modal": {
+                "view_title": "{{name}} 配置文件内容",
+                "copy_success": "配置内容已复制"
+            },
+            "toast": {
+                "sync_success": "同步成功！{{name}} 已准备就绪。",
+                "sync_error": "同步失败：{{error}}"
+            },
+            "sync_confirm_title": "同步确认",
+            "sync_confirm_message": "即将为您同步 {{name}} 的配置。⚠️ 注意：此操作将覆盖您本地已有的配置文件（如登录状态、API Key 等）。确定要继续吗？"
         }
     },
     "monitor": {
@@ -642,12 +819,15 @@
             "gemini": "Gemini",
             "claude": "Claude",
             "images": "绘图",
-            "reset": "重置"
+            "reset": "重置",
+            "by_account": "按账号筛选",
+            "all_accounts": "全部账号"
         },
         "table": {
             "status": "状态",
             "method": "方法",
             "model": "模型",
+            "protocol": "协议",
             "account": "账号",
             "path": "路径",
             "usage": "Token 消耗",
@@ -663,7 +843,11 @@
             "tokens": "Token 消耗 (输入/输出)",
             "time": "请求时间",
             "model": "使用模型",
-            "id": "请求 ID"
+            "mapped_model": "映射模型",
+            "protocol": "请求协议",
+            "account_used": "使用账号",
+            "id": "请求 ID",
+            "payload_empty": "无数据"
         },
         "dialog": {
             "clear_title": "清除监控日志",
@@ -674,6 +858,42 @@
         "title": "发现新版本",
         "message": "新版本已准备就绪，包含多项优化与改进。当前版本: v{{current}}",
         "action": "立即更新"
+    },
+    "login": {
+        "title": "安全访问控制",
+        "desc": "当前运行在 Web 模式下，请输入管理密码或 API Key 以进入后台。",
+        "placeholder": "请输入管理密码或 API Key",
+        "btn_login": "验证并进入",
+        "note": "注意：如果设置了独立的管理密码，请输入管理密码；否则请输入 API_KEY。",
+        "lookup_hint": "如果您忘记了，请运行 docker logs antigravity-manager 寻找 Current API Key 或 Web UI Password",
+        "config_hint": "或执行 grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json 查看。"
+    },
+    "token_stats": {
+        "title": "Token 消费统计",
+        "hourly": "小时",
+        "daily": "日",
+        "weekly": "周",
+        "total_tokens": "总 Token",
+        "input_tokens": "输入 Token",
+        "output_tokens": "输出 Token",
+        "accounts_used": "活跃账号",
+        "models_used": "使用模型",
+        "model_trend": "分模型使用趋势",
+        "account_trend": "分账号使用趋势",
+        "usage_trend": "Token 使用趋势",
+        "by_account": "分账号统计",
+        "by_model": "按模型",
+        "by_account_view": "按账号",
+        "model_details": "分模型详细统计",
+        "account_details": "账号详细统计",
+        "model": "模型",
+        "account": "账号",
+        "requests": "请求数",
+        "input": "输入",
+        "output": "输出",
+        "total": "合计",
+        "percentage": "占比",
+        "no_data": "暂无数据"
     },
     "errors": {
         "stream": {

@@ -15,9 +15,9 @@ fn get_antigravity_path() -> Option<PathBuf> {
     crate::modules::process::get_antigravity_executable_path()
 }
 
-/// 获取 Antigravity 数据库路径（跨平台）
+/// Get Antigravity database path (cross-platform)
 pub fn get_db_path() -> Result<PathBuf, String> {
-    // 优先检查 --user-data-dir 参数指定的路径
+    // Prefer path specified by --user-data-dir argument
     if let Some(user_data_dir) = crate::modules::process::get_user_data_dir_from_process() {
         let custom_db_path = user_data_dir.join("User").join("globalStorage").join("state.vscdb");
         if custom_db_path.exists() {
@@ -25,7 +25,7 @@ pub fn get_db_path() -> Result<PathBuf, String> {
         }
     }
 
-    // 检查是否为便携模式
+    // Check if in portable mode
     if let Some(antigravity_path) = get_antigravity_path() {
         if let Some(parent_dir) = antigravity_path.parent() {
             let portable_db_path = PathBuf::from(parent_dir)
@@ -41,75 +41,84 @@ pub fn get_db_path() -> Result<PathBuf, String> {
         }
     }
 
-    // 标准模式：使用系统默认路径
+    // Standard mode: use system default path
     #[cfg(target_os = "macos")]
     {
-        let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
         Ok(home.join("Library/Application Support/Antigravity/User/globalStorage/state.vscdb"))
     }
 
     #[cfg(target_os = "windows")]
     {
         let appdata =
-            std::env::var("APPDATA").map_err(|_| "无法获取 APPDATA 环境变量".to_string())?;
+            std::env::var("APPDATA").map_err(|_| "Failed to get APPDATA environment variable".to_string())?;
         Ok(PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\state.vscdb"))
     }
 
     #[cfg(target_os = "linux")]
     {
-        let home = dirs::home_dir().ok_or("无法获取 Home 目录")?;
+        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
         Ok(home.join(".config/Antigravity/User/globalStorage/state.vscdb"))
     }
 }
 
-/// 注入 Token 到数据库
+/// Inject Token and Email into database
 pub fn inject_token(
     db_path: &PathBuf,
     access_token: &str,
     refresh_token: &str,
     expiry: i64,
+    email: &str,
 ) -> Result<String, String> {
-    // 1. 打开数据库
-    let conn = Connection::open(db_path).map_err(|e| format!("打开数据库失败: {}", e))?;
+    // 1. Open database
+    let conn = Connection::open(db_path).map_err(|e| format!("Failed to open database: {}", e))?;
 
-    // 2. 读取当前数据
+    // 2. Read current data
     let current_data: String = conn
         .query_row(
             "SELECT value FROM ItemTable WHERE key = ?",
             ["jetskiStateSync.agentManagerInitState"],
             |row| row.get(0),
         )
-        .map_err(|e| format!("读取数据失败: {}", e))?;
+        .map_err(|e| format!("Failed to read data: {}", e))?;
 
-    // 3. Base64 解码
+    // 3. Base64 decode
     let blob = general_purpose::STANDARD
         .decode(&current_data)
-        .map_err(|e| format!("Base64 解码失败: {}", e))?;
+        .map_err(|e| format!("Base64 decoding failed: {}", e))?;
 
-    // 4. 移除旧 Field 6
-    let clean_data = protobuf::remove_field(&blob, 6)?;
+    // 4. Remove old Identity and Token fields
+    // Field 1: UserID
+    // Field 2: Email
+    // Field 6: OAuthTokenInfo
+    let mut clean_data = protobuf::remove_field(&blob, 1)?;
+    clean_data = protobuf::remove_field(&clean_data, 2)?;
+    clean_data = protobuf::remove_field(&clean_data, 6)?;
 
-    // 5. 创建新 Field 6
-    let new_field = protobuf::create_oauth_field(access_token, refresh_token, expiry);
+    // 5. Create new fields
+    let new_email_field = protobuf::create_email_field(email);
+    let new_oauth_field = protobuf::create_oauth_field(access_token, refresh_token, expiry);
 
-    // 6. 合并数据
-    let final_data = [clean_data, new_field].concat();
+    // 6. Merge data
+    // We intentionally do NOT re-inject Field 1 (UserID) to force the client 
+    // to re-authenticate the session with the new token.
+    let final_data = [clean_data, new_email_field, new_oauth_field].concat();
     let final_b64 = general_purpose::STANDARD.encode(&final_data);
 
-    // 7. 写入数据库
+    // 7. Write to database
     conn.execute(
         "UPDATE ItemTable SET value = ? WHERE key = ?",
         [&final_b64, "jetskiStateSync.agentManagerInitState"],
     )
-    .map_err(|e| format!("写入数据失败: {}", e))?;
+    .map_err(|e| format!("Failed to write data: {}", e))?;
 
-    // 8. 注入 Onboarding 标记
+    // 8. Inject Onboarding flag
     let onboarding_key = "antigravityOnboarding";
     conn.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
         [onboarding_key, "true"],
     )
-    .map_err(|e| format!("写入 Onboarding 标记失败: {}", e))?;
+    .map_err(|e| format!("Failed to write Onboarding flag: {}", e))?;
 
-    Ok(format!("Token 注入成功！\n数据库: {:?}", db_path))
+    Ok(format!("Token and Identity injection successful!\nDatabase: {:?}", db_path))
 }

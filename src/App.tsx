@@ -7,6 +7,7 @@ import Settings from './pages/Settings';
 import ChatView from './pages/ChatView';
 import ApiProxy from './pages/ApiProxy';
 import Monitor from './pages/Monitor';
+import TokenStats from './pages/TokenStats';
 import ThemeManager from './components/common/ThemeManager';
 import { UpdateNotification } from './components/UpdateNotification';
 import { useEffect, useState } from 'react';
@@ -14,7 +15,9 @@ import { useConfigStore } from './stores/useConfigStore';
 import { useAccountStore } from './stores/useAccountStore';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
-import { invoke } from '@tauri-apps/api/core';
+import { isTauri } from './utils/env';
+import { request as invoke } from './utils/request';
+import { AdminAuthGuard } from './components/common/AdminAuthGuard';
 
 const router = createBrowserRouter([
   {
@@ -42,6 +45,10 @@ const router = createBrowserRouter([
         element: <Monitor />,
       },
       {
+        path: 'token-stats',
+        element: <TokenStats />,
+      },
+      {
         path: 'settings',
         element: <Settings />,
       },
@@ -62,11 +69,18 @@ function App() {
   useEffect(() => {
     if (config?.language) {
       i18n.changeLanguage(config.language);
+      // Support RTL
+      if (config.language === 'ar') {
+        document.documentElement.dir = 'rtl';
+      } else {
+        document.documentElement.dir = 'ltr';
+      }
     }
   }, [config?.language, i18n]);
 
   // Listen for tray events
   useEffect(() => {
+    if (!isTauri()) return;
     const unlistenPromises: Promise<() => void>[] = [];
 
     // 监听托盘切换账号事件
@@ -124,13 +138,13 @@ function App() {
   }, []);
 
   return (
-    <>
+    <AdminAuthGuard>
       <ThemeManager />
       {showUpdateNotification && (
         <UpdateNotification onClose={() => setShowUpdateNotification(false)} />
       )}
       <RouterProvider router={router} />
-    </>
+    </AdminAuthGuard>
   );
 }
 

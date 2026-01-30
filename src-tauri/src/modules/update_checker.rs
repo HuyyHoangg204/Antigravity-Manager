@@ -11,7 +11,7 @@ pub struct UpdateInfo {
     pub current_version: String,
     pub latest_version: String,
     pub has_update: bool,
-    pub download_url: String, // 原为 release_url
+    pub download_url: String, // previously release_url
     pub release_notes: String,
     pub published_at: String,
 }
@@ -58,7 +58,7 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
             err_msg
         })?;
 
-    logger::log_info("正在从 GitHub 检查新版本...");
+    logger::log_info("Checking for new version from GitHub...");
 
     let response = client
         .get(GITHUB_API_URL)
@@ -86,9 +86,9 @@ pub async fn check_for_updates() -> Result<UpdateInfo, String> {
     let has_update = compare_versions(&latest_version, &current_version);
 
     if has_update {
-        logger::log_info(&format!("发现新版本: {} (当前版本: {})", latest_version, current_version));
+        logger::log_info(&format!("New version found: {} (Current version: {})", latest_version, current_version));
     } else {
-        logger::log_info(&format!("已是最新版本: {} (与远程版本 {} 一致)", current_version, latest_version));
+        logger::log_info(&format!("Already up to date: {} (Matches remote version {})", current_version, latest_version));
     }
 
     Ok(UpdateInfo {
@@ -192,11 +192,11 @@ mod tests {
 
     #[test]
     fn test_compare_versions() {
-        assert!(compare_versions("3.3.33", "3.3.32"));
-        assert!(compare_versions("3.4.0", "3.3.32"));
-        assert!(compare_versions("4.0.0", "3.3.32"));
-        assert!(!compare_versions("3.3.31", "3.3.32"));
-        assert!(!compare_versions("3.3.32", "3.3.32"));
+        assert!(compare_versions("3.3.36", "3.3.35"));
+        assert!(compare_versions("3.4.0", "3.3.35"));
+        assert!(compare_versions("4.0.3", "3.3.35"));
+        assert!(!compare_versions("3.3.34", "3.3.35"));
+        assert!(!compare_versions("3.3.35", "3.3.35"));
     }
 
     #[test]
