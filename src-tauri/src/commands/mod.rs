@@ -144,6 +144,14 @@ pub async fn get_current_account() -> Result<Option<Account>, String> {
     }
 }
 
+/// 导出账号（包含 refresh_token）
+use crate::models::AccountExportResponse;
+
+#[tauri::command]
+pub async fn export_accounts(account_ids: Vec<String>) -> Result<AccountExportResponse, String> {
+    modules::account::export_accounts_by_ids(&account_ids)
+}
+
 /// 内部辅助功能：在添加或导入账号后自动刷新一次额度
 async fn internal_refresh_account_quota(
     app: &tauri::AppHandle,

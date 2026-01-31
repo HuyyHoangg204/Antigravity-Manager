@@ -290,6 +290,7 @@ pub fn run() {
             commands::delete_accounts,
             commands::reorder_accounts,
             commands::switch_account,
+            commands::export_accounts,
             // Device fingerprint
             commands::get_device_profiles,
             commands::bind_device_profile,

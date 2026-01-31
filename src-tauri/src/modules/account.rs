@@ -746,7 +746,27 @@ pub fn toggle_proxy_status(
     Ok(())
 }
 
-/// Export all accounts' refresh_tokens
+/// Export accounts by IDs (for backup/migration)
+pub fn export_accounts_by_ids(account_ids: &[String]) -> Result<crate::models::AccountExportResponse, String> {
+    use crate::models::{AccountExportItem, AccountExportResponse};
+    
+    let accounts = list_accounts()?;
+    
+    let export_items: Vec<AccountExportItem> = accounts
+        .into_iter()
+        .filter(|acc| account_ids.contains(&acc.id))
+        .map(|acc| AccountExportItem {
+            email: acc.email,
+            refresh_token: acc.token.refresh_token,
+        })
+        .collect();
+
+    Ok(AccountExportResponse {
+        accounts: export_items,
+    })
+}
+
+/// Export all accounts' refresh_tokens (legacy, kept for compatibility)
 #[allow(dead_code)]
 pub fn export_accounts() -> Result<Vec<(String, String)>, String> {
     let accounts = list_accounts()?;

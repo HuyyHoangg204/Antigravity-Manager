@@ -132,6 +132,7 @@ struct AccountListResponse {
     current_account_id: Option<String>,
 }
 
+use crate::models::{AccountExportItem, AccountExportResponse};
 fn to_account_response(
     account: &crate::models::account::Account,
     current_id: &Option<String>,
@@ -510,6 +511,7 @@ impl AxumServer {
                 get(admin_get_token_stats_account_trend_daily),
             )
             .route("/accounts/bulk-delete", post(admin_delete_accounts))
+            .route("/accounts/export", post(admin_export_accounts))
             .route("/accounts/reorder", post(admin_reorder_accounts))
             .route("/accounts/:accountId/quota", get(admin_fetch_account_quota))
             .route(
@@ -743,6 +745,27 @@ async fn admin_list_accounts(
         current_account_id: current_id,
         accounts: account_responses,
     }))
+}
+
+/// Export accounts with refresh tokens (for backup/migration)
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportAccountsRequest {
+    account_ids: Vec<String>,
+}
+
+async fn admin_export_accounts(
+    State(_state): State<AppState>,
+    Json(payload): Json<ExportAccountsRequest>,
+) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let response = account::export_accounts_by_ids(&payload.account_ids).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse { error: e }),
+        )
+    })?;
+
+    Ok(Json(response))
 }
 
 async fn admin_get_current_account(
