@@ -247,6 +247,10 @@ print(response.choices[0].message.content)
 ## 📝 Developer & Community
 
 *   **Changelog**:
+    *   **v4.0.12 (2026-02-01)**:
+        -   **[Code Refactoring] Connector Service Optimization**:
+            -   **Deep Optimization**: Rewrote the core logic of the connector service (`connector.rs`) to eliminate inefficient legacy code.
+            -   **Performance Boost**: Optimized the connection establishment and handling process, improving overall system stability and response speed.
     *   **v4.0.11 (2026-01-31)**:
         -   **[Core Fix] Endpoint Reordering & Auto-Blocking (Fix 403 VALIDATION_REQUIRED)**:
             -   **Endpoint Optimization**: Prioritized API endpoints as `Sandbox -> Daily -> Prod`. Using lenient environments first to reduce the occurrence of 403 errors.

@@ -359,6 +359,10 @@ response = client.chat.completions.create(
 ## 📝 开发者与社区
 
 *   **版本演进 (Changelog)**:
+    *   **v4.0.12 (2026-02-01)**:
+        -   **[代码重构] 连接器服务优化 (Refactor Connector Service)**:
+            -   **深度优化**: 重写了连接器服务 (`connector.rs`) 的核心逻辑，消除了历史遗留的低效代码。
+            -   **性能提升**: 优化了连接建立与处理流程，提升了系统的整体稳定性与响应速度。
     *   **v4.0.11 (2026-01-31)**:
         -   **[核心修复] 调整 API 端点顺序与自动阻断 (Fix 403 VALIDATION_REQUIRED)**:
             -   **端点顺序优化**: 将 Google API 的请求顺序调整为 `Sandbox -> Daily -> Prod`。优先使用宽松环境，从源头减少 403 错误的发生。
