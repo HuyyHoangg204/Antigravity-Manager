@@ -111,7 +111,7 @@ jobs:
           # Extract the section, remove leading 4 spaces dedent
           awk -v ver="$VERSION" '
             BEGIN { capture=0 }
-            # Match start line: "    *   **v4.0.13..."
+            # Match start line: "    *   **v4.0.14..."
             $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*" ver { capture=1; next }
             # Match next version line to stop: "    *   **v..."
             capture && $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*v" { capture=0; exit }
