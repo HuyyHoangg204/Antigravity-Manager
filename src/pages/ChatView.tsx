@@ -110,19 +110,19 @@ export default function ChatView() {
                 const reader = new FileReader();
                 
                 if (isImage) {
-                    reader.onloadend = () => {
-                        if (typeof reader.result === 'string') {
-                            newAttachments.push({
-                                id: crypto.randomUUID(),
-                                type: 'image',
-                                content: reader.result,
-                                name: file.name,
-                                mimeType: file.type
-                            });
-                        }
+                    compressImage(file).then((compressedContent) => {
+                        newAttachments.push({
+                            id: crypto.randomUUID(),
+                            type: 'image',
+                            content: compressedContent,
+                            name: file.name,
+                            mimeType: 'image/jpeg' // Compressed is usually jpeg/webp
+                        });
                         resolve();
-                    };
-                    reader.readAsDataURL(file);
+                    }).catch(err => {
+                        console.error("Image compression failed", err);
+                        resolve();
+                    });
                 } else {
                     reader.onloadend = () => {
                         if (typeof reader.result === 'string') {
@@ -146,6 +146,51 @@ export default function ChatView() {
 
         Promise.all(promises).then(() => {
             setAttachments(prev => [...prev, ...newAttachments]);
+        });
+    };
+
+    const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target?.result as string;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // Resize if too large (max 1536px to be safe for 5MB limit even with complexity)
+                    const MAX_SIZE = 1536; 
+                    if (width > MAX_SIZE || height > MAX_SIZE) {
+                        if (width > height) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        } else {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error("Failed to get canvas context"));
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // Compress to JPEG with 0.85 quality
+                    // This converts PNG/Heavy formats to optimized JPEG
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                    resolve(compressedDataUrl);
+                };
+                img.onerror = error => reject(error);
+            };
+            reader.onerror = error => reject(error);
         });
     };
 
@@ -402,6 +447,37 @@ export default function ChatView() {
             }
 
             // 2. If not a file block, process as Markdown
+
+            // Enhanced: Unwrap images from code blocks and detect raw base64
+            let markdownContent = part;
+
+            // Strategy 1: Remove code blocks wrapping images using specific replacement callback
+            // Find any code block
+            markdownContent = markdownContent.replace(/```(?:[\w-]*\n)?([\s\S]*?)```/g, (match, contentInside) => {
+                // If the content inside specifically looks like an image or file link, unwrap it.
+                // We check for ![...](...) pattern.
+                if (contentInside.trim().match(/^!\[[\s\S]*?\]\([\s\S]*?\)$/)) {
+                    return contentInside.trim();
+                }
+                return match; // Keep as code block if it's just code
+            });
+            
+            // Strategy 2: Handle indented code blocks (4 spaces or tab) for images
+            // If the content is indented but is just an image
+            if (markdownContent.match(/^(\s{4,}|\t)!\[[\s\S]*?\]\([\s\S]*?\)$/s)) {
+                 markdownContent = markdownContent.trim();
+            }
+
+            // Strategy 3: Setup for raw base64 detection (if model returns just base64 string)
+            // Use a heuristic: if it starts with data:image and is long, wrap it in an image tag
+            if (markdownContent.trim().match(/^data:image\/[a-zA-Z]+;base64,[A-Za-z0-9+/=]+$/)) {
+                markdownContent = `![Generated Image](${markdownContent.trim()})`;
+            }
+            
+            // Strategy 4: Fallback - if we successfully unwrapped into ![...](...), ReactMarkdown will handle it.
+            // But if there are "broken" images due to weird characters in base64 inside markdown, we might need more processing.
+            // keeping it simple for now.
+
             return (
                 <div key={i} className="prose prose-sm dark:prose-invert max-w-none break-words">
                     <ReactMarkdown 
@@ -424,7 +500,7 @@ export default function ChatView() {
                             )
                         }}
                     >
-                        {part}
+                        {markdownContent}
                     </ReactMarkdown>
                 </div>
             );

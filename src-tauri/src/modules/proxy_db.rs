@@ -141,11 +141,12 @@ pub fn get_stats() -> Result<crate::proxy::monitor::ProxyStats, String> {
     let conn = connect_db()?;
 
     // Optimized: Use single query instead of three separate queries
+    // Use COALESCE to handle NULL result when table is empty or no matches found
     let (total_requests, success_count, error_count): (u64, u64, u64) = conn.query_row(
         "SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN status >= 200 AND status < 400 THEN 1 ELSE 0 END) as success,
-            SUM(CASE WHEN status < 200 OR status >= 400 THEN 1 ELSE 0 END) as error
+            COALESCE(SUM(CASE WHEN status >= 200 AND status < 400 THEN 1 ELSE 0 END), 0) as success,
+            COALESCE(SUM(CASE WHEN status < 200 OR status >= 400 THEN 1 ELSE 0 END), 0) as error
          FROM request_logs",
         [],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),

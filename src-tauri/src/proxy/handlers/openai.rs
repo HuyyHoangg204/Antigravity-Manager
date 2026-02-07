@@ -120,8 +120,8 @@ pub async fn handle_chat_completions(
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager;
     let pool_size = token_manager.len();
-    // [FIX] Ensure max_attempts is at least 2 to allow for internal retries
-    let max_attempts = MAX_RETRY_ATTEMPTS.min(pool_size.saturating_add(1)).max(2);
+    // [FIX] Allow retrying across all available accounts, fallback to MAX_RETRY_ATTEMPTS
+    let max_attempts = pool_size.max(MAX_RETRY_ATTEMPTS);
 
     let mut last_error = String::new();
     let mut last_email: Option<String> = None;
