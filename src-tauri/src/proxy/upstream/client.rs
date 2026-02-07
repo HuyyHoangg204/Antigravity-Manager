@@ -1,9 +1,12 @@
 // 上游客户端实现
 // 基于高性能通讯接口封装
 
+use std::sync::Arc;
+use dashmap::DashMap;
 use reqwest::{header, Client, Response, StatusCode};
 use serde_json::Value;
 use tokio::time::Duration;
+use tokio::sync::RwLock;
 
 // Cloud Code v1internal endpoints (fallback order: Sandbox → Daily → Prod)
 // 优先使用 Sandbox/Daily 环境以避免 Prod环境的 429 错误 (Ref: Issue #1176)
@@ -18,11 +21,30 @@ const V1_INTERNAL_BASE_URL_FALLBACKS: [&str; 3] = [
 ];
 
 pub struct UpstreamClient {
-    http_client: Client,
+    default_client: Client,
+    proxy_pool: Option<Arc<crate::proxy::proxy_pool::ProxyPoolManager>>,
+    client_cache: DashMap<String, Client>, // proxy_id -> Client
+    user_agent_override: RwLock<Option<String>>,
 }
 
 impl UpstreamClient {
-    pub fn new(proxy_config: Option<crate::proxy::config::UpstreamProxyConfig>) -> Self {
+    pub fn new(
+        proxy_config: Option<crate::proxy::config::UpstreamProxyConfig>,
+        proxy_pool: Option<Arc<crate::proxy::proxy_pool::ProxyPoolManager>>,
+    ) -> Self {
+        let default_client = Self::build_client_internal(proxy_config)
+            .expect("Failed to create default HTTP client");
+
+        Self { 
+            default_client,
+            proxy_pool,
+            client_cache: DashMap::new(),
+            user_agent_override: RwLock::new(None),
+        }
+    }
+
+    /// Internal helper to build a client with optional upstream proxy config
+    fn build_client_internal(proxy_config: Option<crate::proxy::config::UpstreamProxyConfig>) -> Result<Client, reqwest::Error> {
         let mut builder = Client::builder()
             // Connection settings (优化连接复用，减少建立开销)
             .connect_timeout(Duration::from_secs(20))
@@ -41,14 +63,74 @@ impl UpstreamClient {
             }
         }
 
-        let http_client = builder.build().expect("Failed to create HTTP client");
-
-        Self { http_client }
+        builder.build()
+    }
+    
+    /// Build a client with a specific PoolProxyConfig (from ProxyPool)
+    fn build_client_with_proxy(&self, proxy_config: crate::proxy::proxy_pool::PoolProxyConfig) -> Result<Client, reqwest::Error> {
+        // Reuse base settings similar to default client but with specific proxy
+        Client::builder()
+            .connect_timeout(Duration::from_secs(20))
+            .pool_max_idle_per_host(16)
+            .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(60))
+            .timeout(Duration::from_secs(600))
+            .user_agent(crate::constants::USER_AGENT.as_str())
+            .proxy(proxy_config.proxy) // Apply the specific proxy
+            .build()
     }
 
-    /// 构建 v1internal URL
-    /// 
-    /// 构建 API 请求地址
+    /// Set dynamic User-Agent override
+    pub async fn set_user_agent_override(&self, ua: Option<String>) {
+        let mut lock = self.user_agent_override.write().await;
+        *lock = ua;
+        tracing::debug!("UpstreamClient User-Agent override updated: {:?}", lock);
+    }
+
+    /// Get current User-Agent
+    pub async fn get_user_agent(&self) -> String {
+        let ua_override = self.user_agent_override.read().await;
+        ua_override.as_ref().cloned().unwrap_or_else(|| crate::constants::USER_AGENT.clone())
+    }
+
+    /// Get client for a specific account (or default if no proxy bound)
+    pub async fn get_client(&self, account_id: Option<&str>) -> Client {
+        if let Some(pool) = &self.proxy_pool {
+            if let Some(acc_id) = account_id {
+                // Try to get per-account proxy
+                match pool.get_proxy_for_account(acc_id).await {
+                    Ok(Some(proxy_cfg)) => {
+                         // Check cache
+                         if let Some(client) = self.client_cache.get(&proxy_cfg.entry_id) {
+                             return client.clone();
+                         }
+                         // Build new client and cache it
+                         match self.build_client_with_proxy(proxy_cfg.clone()) {
+                             Ok(client) => {
+                                 self.client_cache.insert(proxy_cfg.entry_id.clone(), client.clone());
+                                 tracing::info!("Using ProxyPool proxy ID: {} for account: {}", proxy_cfg.entry_id, acc_id);
+                                 return client;
+                             }
+                             Err(e) => {
+                                 tracing::error!("Failed to build client for proxy {}: {}, falling back to default", proxy_cfg.entry_id, e);
+                             }
+                         }
+                    }
+                    Ok(None) => {
+                        // No proxy found or required for this account, use default
+                    }
+                    Err(e) => {
+                        tracing::error!("Error getting proxy for account {}: {}, falling back to default", acc_id, e);
+                    }
+                }
+            }
+        }
+        // Fallback to default client
+        self.default_client.clone()
+    }
+
+
+    /// Build v1internal URL
     fn build_url(base_url: &str, method: &str, query_string: Option<&str>) -> String {
         if let Some(qs) = query_string {
             format!("{}:{}?{}", base_url, method, qs)
@@ -57,13 +139,7 @@ impl UpstreamClient {
         }
     }
 
-    /// 判断是否应尝试下一个端点
-    /// 
-    /// 当遇到以下错误时，尝试切换到备用端点：
-    /// - 429 Too Many Requests（限流）
-    /// - 408 Request Timeout（超时）
-    /// - 404 Not Found（端点不存在）
-    /// - 5xx Server Error（服务器错误）
+    /// Determine if we should try next endpoint (fallback logic)
     fn should_try_next_endpoint(status: StatusCode) -> bool {
         status == StatusCode::TOO_MANY_REQUESTS
             || status == StatusCode::REQUEST_TIMEOUT
@@ -71,17 +147,19 @@ impl UpstreamClient {
             || status.is_server_error()
     }
 
-    /// 调用 v1internal API（基础方法）
+    /// Call v1internal API (Basic Method)
     /// 
-    /// 发起基础网络请求，支持多端点自动 Fallback
+    /// Initiates a basic network request, supporting multi-endpoint auto-fallback.
+    /// [UPDATED] Takes optional account_id for per-account proxy selection.
     pub async fn call_v1_internal(
         &self,
         method: &str,
         access_token: &str,
         body: Value,
         query_string: Option<&str>,
+        account_id: Option<&str>, // [NEW] Account ID for proxy selection
     ) -> Result<Response, String> {
-        self.call_v1_internal_with_headers(method, access_token, body, query_string, std::collections::HashMap::new()).await
+        self.call_v1_internal_with_headers(method, access_token, body, query_string, std::collections::HashMap::new(), account_id).await
     }
 
     /// [FIX #765] 调用 v1internal API，支持透传额外的 Headers
@@ -92,7 +170,11 @@ impl UpstreamClient {
         body: Value,
         query_string: Option<&str>,
         extra_headers: std::collections::HashMap<String, String>,
+        account_id: Option<&str>, // [NEW] Account ID
     ) -> Result<Response, String> {
+        // [NEW] Get client based on account (cached in proxy pool manager)
+        let client = self.get_client(account_id).await;
+
         // 构建 Headers (所有端点复用)
         let mut headers = header::HeaderMap::new();
         headers.insert(
@@ -104,9 +186,11 @@ impl UpstreamClient {
             header::HeaderValue::from_str(&format!("Bearer {}", access_token))
                 .map_err(|e| e.to_string())?,
         );
+
+        // [NEW] 支持自定义 User-Agent 覆盖
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_str(crate::constants::USER_AGENT.as_str())
+            header::HeaderValue::from_str(&self.get_user_agent().await)
                 .unwrap_or_else(|e| {
                     tracing::warn!("Invalid User-Agent header value, using fallback: {}", e);
                     header::HeaderValue::from_static("antigravity")
@@ -129,8 +213,7 @@ impl UpstreamClient {
             let url = Self::build_url(base_url, method, query_string);
             let has_next = idx + 1 < V1_INTERNAL_BASE_URL_FALLBACKS.len();
 
-            let response = self
-                .http_client
+            let response = client
                 .post(&url)
                 .headers(headers.clone())
                 .json(&body)
@@ -143,11 +226,10 @@ impl UpstreamClient {
                     if status.is_success() {
                         if idx > 0 {
                             tracing::info!(
-                                "✓ Upstream fallback succeeded | Endpoint: {} | Status: {} | Attempt: {}/{}",
+                                "✓ Upstream fallback succeeded | Endpoint: {} | Status: {} | Next endpoints available: {}",
                                 base_url,
                                 status,
-                                idx + 1,
-                                V1_INTERNAL_BASE_URL_FALLBACKS.len()
+                                V1_INTERNAL_BASE_URL_FALLBACKS.len() - idx - 1
                             );
                         } else {
                             tracing::debug!("✓ Upstream request succeeded | Endpoint: {} | Status: {}", base_url, status);
@@ -210,7 +292,10 @@ impl UpstreamClient {
     /// 
     /// 获取远端模型列表，支持多端点自动 Fallback
     #[allow(dead_code)] // API ready for future model discovery feature
-    pub async fn fetch_available_models(&self, access_token: &str) -> Result<Value, String> {
+    pub async fn fetch_available_models(&self, access_token: &str, account_id: Option<&str>) -> Result<Value, String> {
+        // [NEW] Get client based on account
+        let client = self.get_client(account_id).await;
+
         let mut headers = header::HeaderMap::new();
         headers.insert(
             header::CONTENT_TYPE,
@@ -221,9 +306,11 @@ impl UpstreamClient {
             header::HeaderValue::from_str(&format!("Bearer {}", access_token))
                 .map_err(|e| e.to_string())?,
         );
+
+        // [NEW] 支持自定义 User-Agent 覆盖
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_str(crate::constants::USER_AGENT.as_str())
+            header::HeaderValue::from_str(&self.get_user_agent().await)
                 .unwrap_or_else(|e| {
                     tracing::warn!("Invalid User-Agent header value, using fallback: {}", e);
                     header::HeaderValue::from_static("antigravity")
@@ -236,8 +323,7 @@ impl UpstreamClient {
         for (idx, base_url) in V1_INTERNAL_BASE_URL_FALLBACKS.iter().enumerate() {
             let url = Self::build_url(base_url, "fetchAvailableModels", None);
 
-            let response = self
-                .http_client
+            let response = client
                 .post(&url)
                 .headers(headers.clone())
                 .json(&serde_json::json!({}))

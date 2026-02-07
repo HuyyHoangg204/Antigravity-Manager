@@ -35,16 +35,20 @@ import {
     Diamond,
     Gem,
     Circle,
-    Clock,
     ToggleLeft,
     ToggleRight,
     Sparkles,
+    Tag,
+    X,
+    Check,
 } from 'lucide-react';
 import { Account } from '../../types/account';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../../utils/cn';
-import { getQuotaColor, formatTimeRemaining, getTimeRemainingColor } from '../../utils/format';
+
 import { useConfigStore } from '../../stores/useConfigStore';
+import { QuotaItem } from './QuotaItem';
+import { MODEL_CONFIG, sortModels } from '../../config/modelConfig';
 
 // ============================================================================
 // 类型定义
@@ -66,6 +70,7 @@ interface AccountTableProps {
     onDelete: (accountId: string) => void;
     onToggleProxy: (accountId: string) => void;
     onWarmup?: (accountId: string) => void;
+    onUpdateLabel?: (accountId: string, label: string) => void;
     /** 拖拽排序回调，当用户完成拖拽时触发 */
     onReorder?: (accountIds: string[]) => void;
 }
@@ -86,6 +91,7 @@ interface SortableRowProps {
     onDelete: () => void;
     onToggleProxy: () => void;
     onWarmup?: () => void;
+    onUpdateLabel?: (label: string) => void;
 }
 
 interface AccountRowContentProps {
@@ -101,36 +107,14 @@ interface AccountRowContentProps {
     onDelete: () => void;
     onToggleProxy: () => void;
     onWarmup?: () => void;
+    onUpdateLabel?: (label: string) => void;
 }
 
 // ============================================================================
 // 辅助函数
 // ============================================================================
 
-/**
- * 根据配额百分比获取对应的背景色类名
- */
-function getColorClass(percentage: number): string {
-    const color = getQuotaColor(percentage);
-    switch (color) {
-        case 'success': return 'bg-emerald-500';
-        case 'warning': return 'bg-amber-500';
-        case 'error': return 'bg-rose-500';
-        default: return 'bg-gray-500';
-    }
-}
 
-/**
- * 根据重置时间获取对应的文字色类名
- */
-function getTimeColorClass(resetTime: string | undefined): string {
-    const color = getTimeRemainingColor(resetTime);
-    switch (color) {
-        case 'success': return 'text-emerald-500 dark:text-emerald-400';
-        case 'warning': return 'text-amber-500 dark:text-amber-400';
-        default: return 'text-gray-400 dark:text-gray-500 opacity-60';
-    }
-}
 
 // ============================================================================
 // 模型分组配置
@@ -209,6 +193,7 @@ function SortableAccountRow({
     onDelete,
     onToggleProxy,
     onWarmup,
+    onUpdateLabel,
 }: SortableRowProps) {
     const { t } = useTranslation();
     const {
@@ -239,7 +224,7 @@ function SortableAccountRow({
             )}
         >
             {/* 拖拽手柄 */}
-            <td className="pl-2 py-1 w-8">
+            <td className="pl-2 py-1 w-8 align-middle">
                 <div
                     {...attributes}
                     {...listeners}
@@ -250,7 +235,7 @@ function SortableAccountRow({
                 </div>
             </td>
             {/* 复选框 */}
-            <td className="px-2 py-1 w-10">
+            <td className="px-2 py-1 w-10 align-middle">
                 <input
                     type="checkbox"
                     className="checkbox checkbox-xs rounded border-2 border-gray-400 dark:border-gray-500 checked:border-blue-600 checked:bg-blue-600 [--chkbg:theme(colors.blue.600)] [--chkfg:white]"
@@ -272,6 +257,7 @@ function SortableAccountRow({
                 onDelete={onDelete}
                 onToggleProxy={onToggleProxy}
                 onWarmup={onWarmup}
+                onUpdateLabel={onUpdateLabel}
             />
         </tr>
     );
@@ -294,29 +280,72 @@ function AccountRowContent({
     onDelete,
     onToggleProxy,
     onWarmup,
+    onUpdateLabel,
 }: AccountRowContentProps) {
     const { t } = useTranslation();
-    const { config } = useConfigStore();
+    const { config, showAllQuotas } = useConfigStore();
 
-    // 模型配置映射：model_id -> { label, protectedKey }
-    const MODEL_CONFIG: Record<string, { label: string; protectedKey: string }> = {
-        'gemini-3-pro-high': { label: 'G3 Pro', protectedKey: 'gemini-pro' },
-        'gemini-3-flash': { label: 'G3 Flash', protectedKey: 'gemini-flash' },
-        'gemini-3-pro-image': { label: 'G3 Image', protectedKey: 'gemini-pro-image' },
-        'claude-sonnet-4-5-thinking': { label: 'Claude 4.5', protectedKey: 'claude-sonnet' },
+    // 自定义标签编辑状态
+    const [isEditingLabel, setIsEditingLabel] = useState(false);
+    const [labelInput, setLabelInput] = useState(account.custom_label || '');
+
+    const handleSaveLabel = () => {
+        if (onUpdateLabel) {
+            onUpdateLabel(labelInput.trim());
+        }
+        setIsEditingLabel(false);
     };
+
+    const handleCancelLabel = () => {
+        setLabelInput(account.custom_label || '');
+        setIsEditingLabel(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleSaveLabel();
+        } else if (e.key === 'Escape') {
+            handleCancelLabel();
+        }
+    };
+
+    // 使用统一的模型配置
 
     // 获取要显示的模型列表
     const pinnedModels = config?.pinned_quota_models?.models || Object.keys(MODEL_CONFIG);
+
+    // 根据 show_all 状态决定显示哪些模型
+    const displayModels = sortModels(
+        showAllQuotas
+            ? (account.quota?.models || []).map(m => {
+                const config = MODEL_CONFIG[m.name.toLowerCase()];
+                return {
+                    id: m.name.toLowerCase(),
+                    label: config?.shortLabel || config?.label || m.name,
+                    protectedKey: config?.protectedKey || m.name.toLowerCase(),
+                    data: m
+                };
+            })
+            : pinnedModels.filter(modelId => MODEL_CONFIG[modelId]).map(modelId => {
+                const config = MODEL_CONFIG[modelId];
+                return {
+                    id: modelId,
+                    label: config.shortLabel || config.label,
+                    protectedKey: config.protectedKey,
+                    data: account.quota?.models.find(m => m.name.toLowerCase() === modelId)
+                };
+            })
+    );
+
     const isDisabled = Boolean(account.disabled);
 
     return (
         <>
             {/* 邮箱列 */}
-            <td className="px-4 py-1">
-                <div className="flex items-center gap-3">
+            <td className="px-2 py-1 align-middle">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className={cn(
-                        "font-medium text-sm truncate max-w-[180px] xl:max-w-none transition-colors",
+                        "font-medium text-sm break-all transition-colors",
                         isCurrent ? "text-blue-700 dark:text-blue-400" : "text-gray-900 dark:text-base-content"
                     )} title={account.email}>
                         {account.email}
@@ -363,31 +392,66 @@ function AccountRowContent({
                                 return (
                                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold shadow-sm hover:scale-105 transition-transform cursor-default">
                                         <Gem className="w-2.5 h-2.5 fill-current" />
-                                        ULTRA
+                                        {t('accounts.ultra')}
                                     </span>
                                 );
                             } else if (tier.includes('pro')) {
                                 return (
                                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[10px] font-bold shadow-sm hover:scale-105 transition-transform cursor-default">
                                         <Diamond className="w-2.5 h-2.5 fill-current" />
-                                        PRO
+                                        {t('accounts.pro')}
                                     </span>
                                 );
                             } else {
                                 return (
                                     <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 text-[10px] font-bold shadow-sm border border-gray-200 dark:border-white/10 hover:bg-gray-200 transition-colors cursor-default">
                                         <Circle className="w-2.5 h-2.5" />
-                                        FREE
+                                        {t('accounts.free')}
                                     </span>
                                 );
                             }
                         })()}
+                        {/* 自定义标签 */}
+                        {account.custom_label && !isEditingLabel && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 text-[10px] font-bold shadow-sm border border-orange-200/50 dark:border-orange-800/50">
+                                <Tag className="w-2.5 h-2.5" />
+                                {account.custom_label}
+                            </span>
+                        )}
+                        {/* 标签编辑输入框 */}
+                        {isEditingLabel && (
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="text"
+                                    className="px-1.5 py-0.5 text-[10px] w-20 border border-orange-300 dark:border-orange-700 rounded focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white dark:bg-base-200"
+                                    placeholder={t('accounts.custom_label_placeholder', 'Label')}
+                                    value={labelInput}
+                                    onChange={(e) => setLabelInput(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    autoFocus
+                                    maxLength={20}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <button
+                                    className="p-0.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded transition-all"
+                                    onClick={(e) => { e.stopPropagation(); handleSaveLabel(); }}
+                                >
+                                    <Check className="w-3 h-3" />
+                                </button>
+                                <button
+                                    className="p-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all"
+                                    onClick={(e) => { e.stopPropagation(); handleCancelLabel(); }}
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </td>
 
             {/* 模型配额列 */}
-            <td className="px-4 py-1">
+            <td className="px-2 py-1 align-middle">
                 {account.quota?.is_forbidden ? (
                     <div className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50/50 dark:bg-red-900/10 p-1.5 rounded-lg border border-red-100 dark:border-red-900/30">
                         <Ban className="w-4 h-4 shrink-0" />
@@ -396,45 +460,20 @@ function AccountRowContent({
                 ) : (
                     <div className={cn(
                         "grid gap-x-4 gap-y-1 py-0",
-                        pinnedModels.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                        displayModels.length === 1 ? "grid-cols-1" : "grid-cols-2"
                     )}>
-                        {pinnedModels.filter(modelId => MODEL_CONFIG[modelId]).map((modelId) => {
-                            const modelConfig = MODEL_CONFIG[modelId];
-                            const modelData = account.quota?.models.find(m => m.name.toLowerCase() === modelId);
+                        {displayModels.map((model) => {
+                            const modelData = model.data;
 
                             return (
-                                <div key={modelId} className="relative h-[22px] flex items-center px-1.5 rounded-md overflow-hidden border border-gray-100/50 dark:border-white/5 bg-gray-50/30 dark:bg-white/5 group/quota">
-                                    {modelData && (
-                                        <div
-                                            className={`absolute inset-y-0 left-0 transition-all duration-700 ease-out opacity-15 dark:opacity-20 ${getColorClass(modelData.percentage)}`}
-                                            style={{ width: `${modelData.percentage}%` }}
-                                        />
-                                    )}
-                                    <div className="relative z-10 w-full flex items-center text-[10px] font-mono leading-none">
-                                        <span className="min-w-[54px] max-w-[72px] text-gray-500 dark:text-gray-400 font-bold truncate pr-1" title={modelId}>
-                                            {modelConfig.label}
-                                        </span>
-                                        <div className="flex-1 flex justify-center">
-                                            {modelData?.reset_time ? (
-                                                <span className={cn("flex items-center gap-0.5 font-medium transition-colors", getTimeColorClass(modelData.reset_time))}>
-                                                    <Clock className="w-2.5 h-2.5" />
-                                                    {formatTimeRemaining(modelData.reset_time)}
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-300 dark:text-gray-600 italic scale-90">N/A</span>
-                                            )}
-                                        </div>
-                                        <span className={cn("w-[36px] text-right font-bold transition-colors flex items-center justify-end gap-0.5",
-                                            getQuotaColor(modelData?.percentage || 0) === 'success' ? 'text-emerald-600 dark:text-emerald-400' :
-                                                getQuotaColor(modelData?.percentage || 0) === 'warning' ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
-                                        )}>
-                                            {isModelProtected(account.protected_models, modelConfig.protectedKey) && (
-                                                <span title={t('accounts.quota_protected')}><Lock className="w-2.5 h-2.5 text-amber-500" /></span>
-                                            )}
-                                            {modelData ? `${modelData.percentage}%` : '-'}
-                                        </span>
-                                    </div>
-                                </div>
+                                <QuotaItem
+                                    key={model.id}
+                                    label={model.label}
+                                    percentage={modelData?.percentage || 0}
+                                    resetTime={modelData?.reset_time}
+                                    isProtected={isModelProtected(account.protected_models, model.protectedKey)}
+                                    Icon={MODEL_CONFIG[model.id]?.Icon}
+                                />
                             );
                         })}
                     </div>
@@ -442,7 +481,7 @@ function AccountRowContent({
             </td>
 
             {/* 最后使用时间列 */}
-            <td className="px-4 py-1">
+            <td className="px-2 py-1 align-middle">
                 <div className="flex flex-col">
                     <span className="text-xs font-medium text-gray-600 dark:text-gray-400 font-mono whitespace-nowrap">
                         {new Date(account.last_used * 1000).toLocaleDateString()}
@@ -455,14 +494,14 @@ function AccountRowContent({
 
             {/* 操作列 */}
             <td className={cn(
-                "px-4 py-1 sticky right-0 z-10 shadow-[-12px_0_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[-12px_0_12px_-12px_rgba(255,255,255,0.05)] text-center",
+                "px-1 py-1 sticky right-0 z-10 shadow-[-12px_0_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[-12px_0_12px_-12px_rgba(255,255,255,0.05)] text-center align-middle",
                 // 动态背景色处理
                 isCurrent
                     ? "bg-[#f1f6ff] dark:bg-[#1e2330]" // 接近 blue-50/50 的实色
                     : "bg-white dark:bg-base-100",
                 !isCurrent && "group-hover:bg-gray-50 dark:group-hover:bg-base-200"
             )}>
-                <div className="flex items-center justify-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                <div className="flex flex-wrap items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity max-w-[180px] mx-auto">
                     <button
                         className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/30 rounded-lg transition-all"
                         onClick={(e) => { e.stopPropagation(); onViewDetails(); }}
@@ -477,6 +516,21 @@ function AccountRowContent({
                     >
                         <Fingerprint className="w-3.5 h-3.5" />
                     </button>
+                    {/* 自定义标签按钮 */}
+                    {onUpdateLabel && (
+                        <button
+                            className={cn(
+                                "p-1.5 rounded-lg transition-all",
+                                account.custom_label
+                                    ? "text-orange-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                                    : "text-gray-500 dark:text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                            )}
+                            onClick={(e) => { e.stopPropagation(); setIsEditingLabel(true); }}
+                            title={t('accounts.edit_label', 'Edit Label')}
+                        >
+                            <Tag className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                     <button
                         className={`p-1.5 text-gray-500 dark:text-gray-400 rounded-lg transition-all ${(isSwitching || isDisabled) ? 'bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 cursor-not-allowed' : 'hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'}`}
                         onClick={(e) => { e.stopPropagation(); onSwitch(); }}
@@ -563,9 +617,13 @@ function AccountTable({
     onDelete,
     onToggleProxy,
     onReorder,
+    onWarmup,
+    onUpdateLabel,
 }: AccountTableProps) {
     const { t } = useTranslation();
+
     const [activeId, setActiveId] = useState<string | null>(null);
+    // showAllQuotas 已经在 useConfigStore 中解构获取
 
     // 配置拖拽传感器
     const sensors = useSensors(
@@ -629,12 +687,14 @@ function AccountTable({
                                     onChange={onToggleAll}
                                 />
                             </th>
-                            <th className="px-4 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('accounts.table.email')}</th>
-                            <th className="px-4 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[440px] min-w-[360px] whitespace-nowrap">{t('accounts.table.quota')}</th>
-                            <th className="px-4 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{t('accounts.table.last_used')}</th>
-                            <th className="px-4 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 dark:bg-base-200 z-20 shadow-[-12px_0_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[-12px_0_12px_-12px_rgba(255,255,255,0.05)] text-center">{t('accounts.table.actions')}</th>
-                        </tr>
-                    </thead>
+                            <th className="px-2 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[300px] whitespace-nowrap">{t('accounts.table.email')}</th>
+                            <th className="px-2 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[380px] whitespace-nowrap">
+                                {t('accounts.table.quota')}
+                            </th>
+                            <th className="px-2 py-1 text-left rtl:text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[90px] whitespace-nowrap">{t('accounts.table.last_used')}</th>
+                            <th className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap sticky right-0 w-[180px] bg-gray-50 dark:bg-base-200 z-20 shadow-[-12px_0_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[-12px_0_12px_-12px_rgba(255,255,255,0.05)] text-center">{t('accounts.table.actions')}</th>
+                        </tr >
+                    </thead >
                     <SortableContext items={accountIds} strategy={verticalListSortingStrategy}>
                         <tbody className="divide-y divide-gray-100 dark:divide-base-200">
                             {accounts.map((account) => (
@@ -654,49 +714,53 @@ function AccountTable({
                                     onExport={() => onExport(account.id)}
                                     onDelete={() => onDelete(account.id)}
                                     onToggleProxy={() => onToggleProxy(account.id)}
+                                    onWarmup={onWarmup ? () => onWarmup(account.id) : undefined}
+                                    onUpdateLabel={onUpdateLabel ? (label: string) => onUpdateLabel(account.id, label) : undefined}
                                 />
                             ))}
                         </tbody>
                     </SortableContext>
-                </table>
-            </div>
+                </table >
+            </div >
 
             {/* 拖拽悬浮预览层 */}
             <DragOverlay>
-                {activeAccount ? (
-                    <table className="w-full bg-white dark:bg-base-100 shadow-2xl rounded-lg border border-blue-200 dark:border-blue-800">
-                        <tbody>
-                            <tr className="bg-blue-50 dark:bg-blue-900/30">
-                                <td className="pl-2 py-1 w-8">
-                                    <div className="flex items-center justify-center w-6 h-6 text-blue-500">
-                                        <GripVertical className="w-4 h-4" />
-                                    </div>
-                                </td>
-                                <td className="px-2 py-1 w-10">
-                                    <input
-                                        type="checkbox"
-                                        className="checkbox checkbox-xs rounded border-2"
-                                        checked={selectedIds.has(activeAccount.id)}
-                                        readOnly
+                {
+                    activeAccount ? (
+                        <table className="w-full bg-white dark:bg-base-100 shadow-2xl rounded-lg border border-blue-200 dark:border-blue-800">
+                            <tbody>
+                                <tr className="bg-blue-50 dark:bg-blue-900/30">
+                                    <td className="pl-2 py-1 w-8">
+                                        <div className="flex items-center justify-center w-6 h-6 text-blue-500">
+                                            <GripVertical className="w-4 h-4" />
+                                        </div>
+                                    </td>
+                                    <td className="px-2 py-1 w-10">
+                                        <input
+                                            type="checkbox"
+                                            className="checkbox checkbox-xs rounded border-2"
+                                            checked={selectedIds.has(activeAccount.id)}
+                                            readOnly
+                                        />
+                                    </td>
+                                    <AccountRowContent
+                                        account={activeAccount}
+                                        isCurrent={activeAccount.id === currentAccountId}
+                                        isRefreshing={refreshingIds.has(activeAccount.id)}
+                                        isSwitching={activeAccount.id === switchingAccountId}
+                                        onSwitch={() => { }}
+                                        onRefresh={() => { }}
+                                        onViewDevice={() => { }}
+                                        onViewDetails={() => { }}
+                                        onExport={() => { }}
+                                        onDelete={() => { }}
+                                        onToggleProxy={() => { }}
                                     />
-                                </td>
-                                <AccountRowContent
-                                    account={activeAccount}
-                                    isCurrent={activeAccount.id === currentAccountId}
-                                    isRefreshing={refreshingIds.has(activeAccount.id)}
-                                    isSwitching={activeAccount.id === switchingAccountId}
-                                    onSwitch={() => { }}
-                                    onRefresh={() => { }}
-                                    onViewDevice={() => { }}
-                                    onViewDetails={() => { }}
-                                    onExport={() => { }}
-                                    onDelete={() => { }}
-                                    onToggleProxy={() => { }}
-                                />
-                            </tr>
-                        </tbody>
-                    </table>
-                ) : null}
+                                </tr>
+                            </tbody>
+                        </table>
+                    ) : null
+                }
             </DragOverlay>
         </DndContext>
     );

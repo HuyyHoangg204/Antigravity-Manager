@@ -1,4 +1,4 @@
-import { CheckCircle, Mail, Diamond, Gem, Circle } from 'lucide-react';
+import { CheckCircle, Mail, Diamond, Gem, Circle, Tag } from 'lucide-react';
 import { Account } from '../../types/account';
 import { formatTimeRemaining } from '../../utils/format';
 
@@ -68,6 +68,13 @@ function CurrentAccount({ account, onSwitch }: CurrentAccountProps) {
                             );
                         }
                     })()}
+                    {/* 自定义标签 */}
+                    {account.custom_label && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-[10px] font-bold shadow-sm shrink-0">
+                            <Tag className="w-2.5 h-2.5" />
+                            {account.custom_label}
+                        </span>
+                    )}
                 </div>
 
                 {/* Gemini Pro 配额 */}

@@ -22,6 +22,7 @@ use crate::proxy::server::AppState;
 use crate::proxy::mappers::context_manager::ContextManager;
 use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 use crate::proxy::debug_logger;
+use crate::proxy::common::client_adapter::CLIENT_ADAPTERS; // [NEW] Import Adapter Registry
 use axum::http::HeaderMap;
 use std::sync::{atomic::Ordering, Arc};
 
@@ -127,6 +128,13 @@ pub async fn handle_messages(
         .map(char::from)
         .collect::<String>().to_lowercase();
     let debug_cfg = state.debug_logging.read().await.clone();
+    
+    // [NEW] Detect Client Adapter
+    // 检查是否有匹配的客户端适配器（如 opencode）
+    let client_adapter = CLIENT_ADAPTERS.iter().find(|a| a.matches(&headers)).cloned();
+    if let Some(_adapter) = &client_adapter {
+        tracing::debug!("[{}] Client Adapter detected: Applying custom strategies", trace_id);
+    }
         
     // Decide whether this request should be handled by z.ai (Anthropic passthrough) or the existing Google flow.
     let zai = state.zai.read().await.clone();
@@ -402,7 +410,8 @@ pub async fn handle_messages(
             &mapped_model,
             &tools_val,
             request.size.as_deref(),      // [NEW] Pass size parameter
-            request.quality.as_deref()    // [NEW] Pass quality parameter
+            request.quality.as_deref(),   // [NEW] Pass quality parameter
+            None,  // Claude handler uses transform_claude_request_in for image gen
         );
 
         // 0. 尝试提取 session_id 用于粘性调度 (Phase 2/3)
@@ -411,7 +420,7 @@ pub async fn handle_messages(
         let session_id = Some(session_id_str.as_str());
 
         let force_rotate_token = attempt > 0;
-        let (access_token, project_id, email, _wait_ms) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
+        let (access_token, project_id, email, account_id, _wait_ms) = match token_manager.get_token(&config.request_type, force_rotate_token, session_id, &config.final_model).await {
             Ok(t) => t,
             Err(e) => {
                 let safe_message = if e.contains("invalid_grant") {
@@ -643,7 +652,7 @@ pub async fn handle_messages(
             0 // Don't record calibration data when content was purified
         };
 
-        request_with_mapped.model = mapped_model;
+        request_with_mapped.model = mapped_model.clone();
 
         // 生成 Trace ID (简单用时间戳后缀)
         // let _trace_id = format!("req_{}", chrono::Utc::now().timestamp_subsec_millis());
@@ -698,16 +707,31 @@ pub async fn handle_messages(
     
     let method = if actual_stream { "streamGenerateContent" } else { "generateContent" };
     let query = if actual_stream { Some("alt=sse") } else { None };
-        // [FIX #765] Prepare Beta Headers for Thinking + Tools
+        // [FIX #765/1522] Prepare Robust Beta Headers for Claude models
         let mut extra_headers = std::collections::HashMap::new();
-        if request_with_mapped.thinking.is_some() && request_with_mapped.tools.is_some() {
-            extra_headers.insert("anthropic-beta".to_string(), "interleaved-thinking-2025-05-14".to_string());
-            tracing::debug!("[{}] Added Beta Header: interleaved-thinking-2025-05-14", trace_id);
+        if mapped_model.to_lowercase().contains("claude") {
+            extra_headers.insert("anthropic-beta".to_string(), "claude-code-20250219".to_string());
+            tracing::debug!("[{}] Added Comprehensive Beta Headers for Claude model", trace_id);
+        }
+        
+        // [NEW] Inject Beta Headers from Client Adapter
+        if let Some(adapter) = &client_adapter {
+            let mut temp_headers = HeaderMap::new();
+            adapter.inject_beta_headers(&mut temp_headers);
+            for (k, v) in temp_headers {
+                if let Some(name) = k {
+                    if let Ok(v_str) = v.to_str() {
+                        extra_headers.insert(name.to_string(), v_str.to_string());
+                        tracing::debug!("[{}] Added Adapter Header: {}: {}", trace_id, name, v_str);
+                    }
+                }
+            }
         }
 
-        // 5. 上游调用
+        // Upstream call configuration continued...
+
         let response = match upstream
-            .call_v1_internal_with_headers(method, &access_token, gemini_body, query, extra_headers.clone())
+            .call_v1_internal_with_headers(method, &access_token, gemini_body, query, extra_headers.clone(), Some(account_id.as_str()))
             .await {
             Ok(r) => r,
             Err(e) => {
@@ -761,6 +785,7 @@ pub async fn handle_messages(
                     context_limit,
                     Some(raw_estimated), // [FIX] Pass estimated tokens for calibrator learning
                     current_message_count, // [NEW v4.0.0] Pass message count for rewind detection
+                    client_adapter.clone(), // [NEW] Pass client adapter
                 );
 
                 let mut first_data_chunk = None;
@@ -1069,8 +1094,33 @@ pub async fn handle_messages(
         // 5. 统一处理所有可重试错误
         // [REMOVED] 不再特殊处理 QUOTA_EXHAUSTED,允许账号轮换
         // 原逻辑会在第一个账号配额耗尽时直接返回,导致"平衡"模式无法切换账号
-        
-        
+
+        // [FIX] 403 时设置 is_forbidden 状态，避免账号被重复选中
+        if status_code == 403 {
+            // Check for VALIDATION_REQUIRED error - temporarily block account
+            if error_text.contains("VALIDATION_REQUIRED") ||
+               error_text.contains("verify your account") ||
+               error_text.contains("validation_url")
+            {
+                tracing::warn!(
+                    "[Claude] VALIDATION_REQUIRED detected on account {}, temporarily blocking",
+                    email
+                );
+                let block_minutes = 10i64;
+                let block_until = chrono::Utc::now().timestamp() + (block_minutes * 60);
+                if let Err(e) = token_manager.set_validation_block_public(&account_id, block_until, &error_text).await {
+                    tracing::error!("Failed to set validation block: {}", e);
+                }
+            }
+
+            // 设置 is_forbidden 状态
+            if let Err(e) = token_manager.set_forbidden(&account_id, &error_text).await {
+                tracing::error!("Failed to set forbidden status for {}: {}", email, e);
+            } else {
+                tracing::warn!("[Claude] Account {} marked as forbidden due to 403", email);
+            }
+        }
+
         // 确定重试策略
         let strategy = determine_retry_strategy(status_code, &error_text, retried_without_thinking);
         
@@ -1101,7 +1151,10 @@ pub async fn handle_messages(
 
             // 不可重试的错误，直接返回
             error!("[{}] Non-retryable error {}: {}", trace_id, status_code, error_text);
-            return (status, [("X-Account-Email", email.as_str())], error_text).into_response();
+            return (status, [
+                ("X-Account-Email", email.as_str()),
+                ("X-Mapped-Model", request_with_mapped.model.as_str())
+            ], error_text).into_response();
         }
     }
     
@@ -1125,7 +1178,14 @@ pub async fn handle_messages(
             _ => "api_error",
         };
 
-        (last_status, headers, Json(json!({
+        // [FIX] 403 时返回 503，避免 Claude Code 客户端退出到登录页
+        let response_status = if last_status.as_u16() == 403 {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            last_status
+        };
+
+        (response_status, headers, Json(json!({
             "type": "error",
             "error": {
                 "id": "err_retry_exhausted",
@@ -1141,7 +1201,7 @@ pub async fn handle_messages(
                 headers.insert("X-Mapped-Model", v);
              }
         }
-        
+
         let error_type = match last_status.as_u16() {
             400 => "invalid_request_error",
             401 => "authentication_error",
@@ -1151,7 +1211,14 @@ pub async fn handle_messages(
             _ => "api_error",
         };
 
-        (last_status, headers, Json(json!({
+        // [FIX] 403 时返回 503，避免 Claude Code 客户端退出到登录页
+        let response_status = if last_status.as_u16() == 403 {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            last_status
+        };
+
+        (response_status, headers, Json(json!({
             "type": "error",
             "error": {
                 "id": "err_retry_exhausted",
@@ -1512,7 +1579,7 @@ async fn call_gemini_sync(
     trace_id: &str,
 ) -> Result<String, String> {
     // Get token and transform request
-    let (access_token, project_id, _, _wait_ms) = token_manager
+    let (access_token, project_id, _, _, _wait_ms) = token_manager
         .get_token("gemini", false, None, model)
         .await
         .map_err(|e| format!("Failed to get account: {}", e))?;

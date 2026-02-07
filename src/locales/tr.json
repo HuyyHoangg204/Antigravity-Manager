@@ -22,6 +22,7 @@
         "warning": "Uyarı",
         "info": "Bilgi",
         "details": "Detaylar",
+        "example": "Example",
         "clear": "Temizle",
         "prev_page": "Önceki",
         "next_page": "Sonraki",
@@ -33,7 +34,13 @@
         "disabled": "Devre Dışı",
         "tauri_api_not_loaded": "Tauri API yüklenemedi, lütfen uygulamayı yeniden başlatın",
         "environment_error": "Ortam hatası: {{error}}",
-        "submit": "Gönder"
+        "submit": "Gönder",
+        "update": "Güncelle",
+        "load_failed": "Yükleme başarısız",
+        "create_success": "Başarıyla oluşturuldu",
+        "update_success": "Başarıyla güncellendi",
+        "delete_success": "Başarıyla silindi",
+        "copied": "Panoya kopyalandı"
     },
     "nav": {
         "dashboard": "Kontrol Paneli",
@@ -41,6 +48,7 @@
         "proxy": "API Proxy",
         "token_stats": "İstatistikler",
         "call_records": "Trafik Günlükleri",
+        "security": "IP Yönetimi",
         "settings": "Ayarlar",
         "theme_to_dark": "Karanlık Moda Geç",
         "theme_to_light": "Aydınlık Moda Geç",
@@ -57,7 +65,15 @@
         "switch_to_russian": "Rusça'ya Geç",
         "switch_to_russian_short": "RU",
         "switch_to_portuguese": "Portekizce'ye Geç",
-        "switch_to_portuguese_short": "PT"
+        "switch_to_portuguese_short": "PT",
+        "switch_to_traditional_chinese": "Geleneksel Çince'ye Geç",
+        "switch_to_traditional_chinese_short": "TW",
+        "switch_to_korean": "Korece'ye Geç",
+        "switch_to_korean_short": "KO",
+        "switch_to_spanish": "İspanyolca'ya Geç",
+        "switch_to_spanish_short": "ES",
+        "switch_to_malay": "Malayca'ya Geç",
+        "switch_to_malay_short": "MY"
     },
     "dashboard": {
         "hello": "Merhaba, Kullanıcı 👋",
@@ -127,6 +143,7 @@
         "switch_to": "Bu hesaba geç",
         "actions": "İşlemler",
         "device_fingerprint": "Cihaz Parmak İzi",
+        "show_all_quotas": "Tüm kotaları göster",
         "device_fingerprint_dialog": {
             "title": "Cihaz Parmak İzi",
             "operations": "Cihaz Parmak İzi İşlemleri",
@@ -167,7 +184,9 @@
         },
         "quota_protected": "Korumalı",
         "details": {
-            "title": "Kota Detayları"
+            "title": "Kota Detayları",
+            "model_quota": "Model Kotası",
+            "protected_models": "Korumalı Modeller"
         },
         "toast": {
             "proxy_enabled": "{{count}} hesap için proxy etkinleştirildi",
@@ -192,7 +211,12 @@
                 "link_click_to_copy": "Kopyalamak için tıklayın",
                 "manual_hint": "Tarayıcı otomatik olarak yönlendirilmedi mi? Lütfen geri dönüş bağlantısını veya Yetkilendirme Kodunu buraya yapıştırın:",
                 "manual_placeholder": "Bağlantıyı veya kodu buraya yapıştırın...",
-                "error_no_flow": "Aktif kimlik doğrulama akışı bulunamadı. Lütfen OAuth'u yeniden başlatın."
+                "error_no_flow": "Aktif kimlik doğrulama akışı bulunamadı. Lütfen OAuth'u yeniden başlatın.",
+                "web_hint": "Google giriş sayfası yeni bir pencerede açılacak",
+                "error_no_url": "OAuth URL'si alınamadı",
+                "popup_blocked": "Açılır pencere engellendi",
+                "manual_submitting": "Yetkilendirme kodu gönderiliyor...",
+                "manual_submitted": "Yetkilendirme kodu gönderildi, arka planda işleniyor..."
             },
             "token": {
                 "label": "Refresh Token",
@@ -259,7 +283,8 @@
             "account": "Hesap",
             "proxy": "Proxy Ayarları",
             "advanced": "Gelişmiş",
-            "about": "Hakkında"
+            "about": "Hakkında",
+            "debug": "Hata Ayıklama"
         },
         "general": {
             "title": "Genel Ayarlar",
@@ -288,6 +313,59 @@
         },
         "proxy": {
             "title": "Proxy Ayarları"
+        },
+        "proxy_pool": {
+            "title": "Proxy Pool",
+            "strategy_priority": "Priority",
+            "strategy_round_robin": "Round Robin",
+            "strategy_random": "Random",
+            "strategy_least_connections": "Least Connections",
+            "test_all": "Test All",
+            "batch_import": "Import",
+            "binding_manager": "Bindings",
+            "add_proxy": "Add Proxy",
+            "edit_proxy": "Edit Proxy",
+            "name": "Name",
+            "url": "Proxy URL",
+            "username": "Username",
+            "password": "Password",
+            "max_accounts": "Max Accounts",
+            "max_accounts_hint": "0 = Unlimited",
+            "priority": "Priority",
+            "priority_hint": "Lower is better",
+            "health_check_url": "Health Check URL",
+            "tags": "Tags",
+            "add_tag_placeholder": "Add tag...",
+            "seconds": "Sec",
+            "test_completed": "Health check completed",
+            "test_failed": "Health check failed",
+            "confirm_delete": "Are you sure you want to delete this proxy?",
+            "empty": "No proxies available",
+            "column_priority": "Priority",
+            "column_status": "Status",
+            "column_details": "Proxy Details",
+            "column_bindings": "Bindings",
+            "import_title": "Batch Import Proxies",
+            "import_label": "Paste Proxy List (One per line)",
+            "import_hint": "Supported formats: protocol://user:pass@host:port, host:port:user:pass",
+            "import_preview": "Preview",
+            "import_confirm": "Import {{count}} Proxies",
+            "no_valid_proxies": "No valid proxies found",
+            "binding": {
+                "title": "Account Proxy Bindings",
+                "load_failed": "Failed to load bindings",
+                "unbind_success": "Unbound successfully",
+                "bind_success": "Bound successfully",
+                "update_failed": "Failed to update binding",
+                "assigned_proxy": "Assigned Proxy",
+                "default_strategy": "Default (Follow Strategy)"
+            },
+            "status": {
+                "inactive": "Inactive",
+                "checking": "Checking",
+                "healthy": "Healthy",
+                "timeout": "Timeout"
+            }
         },
         "advanced": {
             "title": "Gelişmiş Ayarlar",
@@ -319,6 +397,14 @@
             "clear_logs_title": "Log Temizleme Onayı",
             "clear_logs_msg": "Tüm log önbellek dosyalarını temizlemek istediğinizden emin misiniz?",
             "logs_cleared": "Log önbelleği temizlendi",
+            "antigravity_cache_title": "Antigravity Önbellek Temizliği",
+            "antigravity_cache_desc": "Antigravity önbelleğini temizlemek giriş hatalarını, sürüm doğrulama hatalarını ve OAuth yetkilendirme hatalarını çözebilir.",
+            "antigravity_cache_warning": "Önbelleği temizlemeden önce Antigravity'nin tamamen kapatıldığından emin olun.",
+            "clear_antigravity_cache": "Antigravity Önbelleğini Temizle",
+            "clear_cache_confirm_title": "Antigravity Önbellek Temizliğini Onayla",
+            "clear_cache_confirm_msg": "Aşağıdaki önbellek dizinleri temizlenecek:",
+            "cache_cleared_success": "Önbellek temizlendi, {{size}} MB boşaltıldı",
+            "cache_not_found": "Antigravity önbellek dizinleri bulunamadı",
             "http_api_title": "HTTP API Servisi",
             "http_api_desc": "Harici programlar (örn. VS Code eklentileri) için yerel HTTP arayüzü sağlar.",
             "http_api_enabled": "HTTP API'yi Etkinleştir",
@@ -351,6 +437,19 @@
             "support_alipay": "Alipay",
             "support_wechat": "WeChat Pay",
             "support_buymeacoffee": "Buy Me a Coffee"
+        },
+        "thinking_budget": {
+            "title": "Düşünme Bütçesi (Thinking Budget)",
+            "description": "Yapay zeka modelinin akıl yürütme derinliğini kontrol eder, karmaşık görevleri çözme yeteneğini etkiler",
+            "mode_auto": "Otomatik (Önerilen)",
+            "mode_auto_desc": "Sistem her model için en uygun limiti uygular",
+            "mode_passthrough": "Doğrudan geçiş",
+            "mode_passthrough_desc": "Çağıranın değerine tamamen güven (risk yönetimi sizin sorumluluğunuzda)",
+            "mode_custom": "Özel",
+            "mode_custom_desc": "Sabit özel bütçe değeri kullan",
+            "custom_value_label": "Özel bütçe değeri",
+            "custom_value_hint": "Aralık: 1024 - 65536 token",
+            "warning_passthrough": "⚠️ Doğrudan geçiş modu kotayı hızla tüketebilir"
         }
     },
     "tray": {
@@ -378,6 +477,12 @@
         },
         "config": {
             "title": "Hizmet Yapılandırması",
+            "request": {
+                "user_agent": "User-Agent Override",
+                "user_agent_tooltip": "Override the User-Agent header sent to upstream APIs. Leave empty to use default.",
+                "user_agent_hint": "Current Default: antigravity/<version> <os>/<arch>",
+                "user_agent_placeholder": "Enter custom User-Agent string..."
+            },
             "port": "Dinleme Portu",
             "port_tooltip": "Yerel API Proxy'nin dinlediği TCP portu. Değiştirmek için hizmeti durdurun, ardından uygulamak için yeniden başlatın.",
             "port_hint": "Varsayılan 8045, değişiklikleri uygulamak için yeniden başlatma gerekir",
@@ -654,10 +759,10 @@
             "title": "Model Yönlendirici",
             "subtitle": "Modelleri serilere göre yönlendirin veya özel tam eşlemeler ekleyin.\nNot: Yerel Claude geçiş modelleri (örn. claude-opus-4-5-thinking) varsayılan olarak seri gruplarını atlar. Geçersiz kılmak için \"Uzman Özel Yönlendirme\" kullanın.",
             "subtitle_simple": "Joker karakterlerle veya tam eşlemelerle model yönlendirmeyi özelleştirin",
-            "background_task_title": "Background Task Model",
-            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
-            "use_default": "Use System Default",
-            "current_model": "Current Model",
+            "background_task_title": "Arka Plan Görev Modeli",
+            "background_task_desc": "Başlık oluşturma, özetleme vb. Claude CLI arka plan görevleri için kullanılan model (Varsayılan: gemini-2.5-flash)",
+            "use_default": "Sistem Varsayılanını Kullan",
+            "current_model": "Mevcut Model",
             "apply_presets": "Ön Ayarları Uygula",
             "presets_applied": "Ön ayarlar başarıyla uygulandı",
             "custom_mappings": "Özel Eşlemeler",
@@ -821,9 +926,16 @@
         }
     },
     "update_notification": {
-        "title": "Yeni Sürüm Mevcut",
-        "message": "Optimizasyonlar ve iyileştirmeler içeren yeni bir sürüm hazır. Mevcut: v{{current}}",
-        "action": "Şimdi Güncelle"
+        "title": "Yeni versiyon mevcut",
+        "message": "Optimizasyonlar ve iyileştirmeler içeren yeni bir versiyon hazır. Mevcut: v{{current}}",
+        "ready": "Güncelleme hazır",
+        "downloading": "Güncelleme indiriliyor...",
+        "restarting": "Uygulama yeniden başlatılıyor...",
+        "auto_update": "Otomatik güncelleme",
+        "toast": {
+            "not_ready": "Otomatik güncelleme paketi hazır değil, indirme sayfasına yönlendiriliyorsunuz...",
+            "failed": "Otomatik güncelleme başarısız oldu, indirme sayfasına yönlendiriliyorsunuz..."
+        }
     },
     "login": {
         "title": "Güvenli Erişim Kontrolü",
@@ -860,5 +972,133 @@
         "total": "Toplam",
         "percentage": "Oran",
         "no_data": "Veri yok"
+    },
+    "security": {
+        "title": "Güvenlik İzleme",
+        "refresh_data": "Verileri Gücelle",
+        "refresh": "Yenile",
+        "tab_logs": "Erişim Günlükleri",
+        "tab_stats": "İstatistik Analizi",
+        "tab_blacklist": "Kara Liste",
+        "tab_whitelist": "Beyaz Liste",
+        "tab_config": "Güvenlik Ayarları",
+        "stats": {
+            "total_requests": "Toplam İstek",
+            "total_requests_desc": "Tüm kayıtlı istekler",
+            "unique_ips": "Benzersiz IP'ler",
+            "unique_ips_desc": "Farklı istemci IP adresleri",
+            "blocked_requests": "Engellenen İstekler",
+            "blocked_requests_desc": "Kurallar tarafından reddedilen istekler",
+            "ip_activity_token_usage": "IP Aktivitesi ve Token Kullanımı",
+            "hour": "S",
+            "day": "G",
+            "week": "H",
+            "month": "A",
+            "rank": "Sıra",
+            "ip_address": "IP Adresi",
+            "activity_reqs": "Aktivite (İstek)",
+            "total_token": "Toplam Token",
+            "prompt": "İstem",
+            "completion": "Tamamlama",
+            "no_data": "Veri Yok"
+        },
+        "logs": {
+            "search_placeholder": "IP, Yol, Kullanıcı Aracısı Ara...",
+            "show_blocked_only": "Sadece Engellenenler",
+            "status": "Durum",
+            "ip_address": "IP Adresi",
+            "method": "Yöntem",
+            "path": "Yol",
+            "duration": "Süre",
+            "time": "Zaman",
+            "reason": "Sebep",
+            "blocked": "Engellendi",
+            "no_logs": "Günlük Yok",
+            "total_records": "Toplam {{total}} kayıt",
+            "prev_page": "Önceki",
+            "next_page": "Sonraki",
+            "page_num": "Sayfa {{page}}",
+            "per_page_suffix": "/sayfa"
+        },
+        "blacklist": {
+            "add_ip": "IP Ekle",
+            "search_placeholder": "Ara...",
+            "added_at": "Eklenme Tarihi",
+            "expires_at": "Bitiş Tarihi",
+            "no_data": "Kara liste verisi yok",
+            "add_title": "Kara Listeye Ekle",
+            "ip_cidr_label": "IP Adresi veya CIDR",
+            "ip_cidr_placeholder": "örn. 192.168.1.1 veya 10.0.0.0/24",
+            "reason_label": "Sebep (İsteğe Bağlı)",
+            "reason_placeholder": "örn. Kötü amaçlı tarama",
+            "expires_label": "Bitiş Süresi (Saat, İsteğe Bağlı)",
+            "expires_placeholder": "Kalıcı olması için boş bırakın",
+            "cancel": "İptal",
+            "confirm": "Ekle",
+            "add_btn": "Ekle"
+        },
+        "whitelist": {
+            "add_ip": "Güvenilir IP Ekle",
+            "no_data": "Beyaz liste verisi yok",
+            "add_title": "Beyaz Listeye Ekle",
+            "description_label": "Açıklama (İsteğe Bağlı)",
+            "description_placeholder": "örn. Dahili Sunucu",
+            "cancel": "İptal",
+            "confirm": "Ekle",
+            "add_btn": "Ekle"
+        },
+        "config": {
+            "title": "Güvenlik Ayarları",
+            "save": "Değişiklikleri Kaydet",
+            "saving": "Kaydediliyor...",
+            "blacklist_title": "IP Kara Listesi",
+            "blacklist_desc": "Engellenen IP adreslerini ve kuralları yönetin.",
+            "enable_blacklist": "Kara Liste Korumasını Etkinleştir",
+            "block_msg_label": "Özel Engelleme Mesajı",
+            "block_msg_desc": "Engellenen istemcilere döndürülen yanıt içeriği.",
+            "whitelist_title": "IP Beyaz Listesi",
+            "whitelist_desc": "Güvenilir IP adreslerini yönetin.",
+            "enable_whitelist": "Beyaz Liste Modunu Etkinleştir",
+            "whitelist_warning": "Uyarı: Beyaz liste modunu etkinleştirmek, beyaz listede olmayan IP'lerden gelen TÜM istekleri engelleyecektir. Proxy üzerinden erişiyorsanız, kendinizi dışarıda bırakmamaya dikkat edin.",
+            "whitelist_priority": "Beyaz Liste Önceliği (Kara Listeyi Geçersiz Kılar)",
+            "whitelist_priority_desc": "Etkinleştirilirse, beyaz listedeki IP'lere kara liste kurallarıyla eşleşseler bile izin verilir.",
+            "load_error": "Yapılandırma yüklenemedi",
+            "save_success": "Yapılandırma kaydedildi",
+            "save_error": "Yapılandırma kaydedilemedi"
+        }
+    },
+    "user_token": {
+        "title": "Kullanıcı Token Yönetimi",
+        "total_users": "Toplam Kullanıcı",
+        "active_tokens": "Aktif Tokenlar",
+        "total_created": "Toplam Oluşturulan",
+        "create": "Token Oluştur",
+        "username": "Kullanıcı adı",
+        "token": "Token",
+        "expires": "Süre Sonu",
+        "usage": "Kullanım",
+        "ip_limit": "IP Sınırı",
+        "created": "Oluşturulma",
+        "today_requests": "Bugünkü İstekler",
+        "never": "Asla",
+        "renew": "Yenile",
+        "renew_button": "Yenile",
+        "unlimited": "Sınırsız",
+        "create_title": "Yeni Token Oluştur",
+        "description": "Açıklama",
+        "curfew": "Sokağa çıkma yasağı (Kullanılamaz zaman)",
+        "edit_title": "Tokenı Düzenle",
+        "username_required": "Kullanıcı adı zorunludur",
+        "renew_success": "Başarıyla yenilendi",
+        "expires_day": "1 Gün",
+        "expires_week": "1 Hafta",
+        "expires_month": "1 Ay",
+        "expires_never": "Asla",
+        "no_data": "Token bulunamadı",
+        "placeholder_username": "örn: user1",
+        "placeholder_desc": "İsteğe bağlı notlar",
+        "placeholder_max_ips": "0 = Sınırsız",
+        "hint_max_ips": "0 sınırsız demektir",
+        "hint_curfew": "Devre dışı bırakmak için boş bırakın. Sunucu saatine göredir."
     }
 }
