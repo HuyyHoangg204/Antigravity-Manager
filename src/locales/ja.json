@@ -22,7 +22,9 @@
         "warning": "警告",
         "info": "情報",
         "details": "詳細",
+        "example": "Example",
         "clear": "クリア",
+        "clearing": "クリア中...",
         "prev_page": "前へ",
         "next_page": "次へ",
         "pagination_info": "{{total}} 件中 {{start}} から {{end}} を表示",
@@ -34,7 +36,15 @@
         "tauri_api_not_loaded": "Tauri APIが読み込まれていません。アプリを再起動してください",
         "environment_error": "環境エラー: {{error}}",
         "load_more": "もっと読み込む",
-        "submit": "送信"
+        "submit": "送信",
+        "update": "更新",
+        "load_failed": "読み込み失敗",
+        "create_success": "作成成功",
+        "update_success": "更新成功",
+        "delete_success": "削除成功",
+        "copied": "クリップボードにコピーしました",
+        "retry": "再試行",
+        "back": "戻る"
     },
     "nav": {
         "dashboard": "ダッシュボード",
@@ -42,6 +52,8 @@
         "proxy": "APIプロキシ",
         "token_stats": "統計",
         "call_records": "トラフィックログ",
+        "security": "IP管理",
+        "security_logs": "IPログ",
         "settings": "設定",
         "theme_to_dark": "ダークモードに切り替え",
         "theme_to_light": "ライトモードに切り替え",
@@ -60,7 +72,13 @@
         "switch_to_portuguese": "ポルトガル語に切り替え",
         "switch_to_portuguese_short": "PT",
         "switch_to_traditional_chinese": "繁体字中国語に切り替え",
-        "switch_to_traditional_chinese_short": "繁中"
+        "switch_to_traditional_chinese_short": "繁中",
+        "switch_to_korean": "韓国語に切り替え",
+        "switch_to_korean_short": "KO",
+        "switch_to_spanish": "スペイン語に切り替え",
+        "switch_to_spanish_short": "ES",
+        "switch_to_malay": "マレー語に切り替え",
+        "switch_to_malay_short": "MY"
     },
     "dashboard": {
         "hello": "こんにちは 👋",
@@ -134,6 +152,7 @@
         "switch_to": "このアカウントに切り替え",
         "actions": "操作",
         "device_fingerprint": "デバイス指紋",
+        "show_all_quotas": "すべてのクォータを表示",
         "device_fingerprint_dialog": {
             "title": "デバイス指紋",
             "operations": "デバイス指紋操作",
@@ -174,7 +193,9 @@
         },
         "quota_protected": "保護中",
         "details": {
-            "title": "クォータ詳細"
+            "title": "クォータ詳細",
+            "model_quota": "モデルクォータ",
+            "protected_models": "保護されたモデル"
         },
         "toast": {
             "proxy_enabled": "{{count}} 個のアカウントのプロキシを有効にしました",
@@ -199,7 +220,12 @@
                 "link_click_to_copy": "クリックしてコピー",
                 "manual_hint": "ブラウザがリダイレクトされませんでしたか？ここにコールバックURLまたはコードを貼り付けてください：",
                 "manual_placeholder": "コールバックURLまたはコードを貼り付け...",
-                "error_no_flow": "まず「OAuth認証を開始」をクリックしてください"
+                "error_no_flow": "まず「OAuth認証を開始」をクリックしてください",
+                "web_hint": "Googleログインページが新しいウィンドウで開きます",
+                "error_no_url": "OAuth URLを取得できませんでした",
+                "popup_blocked": "ポップアップがブロックされました",
+                "manual_submitting": "認可コードを送信中...",
+                "manual_submitted": "認可コードを送信しました。バックエンドで処理中です..."
             },
             "token": {
                 "label": "リフレッシュトークン",
@@ -280,6 +306,7 @@
             "account": "アカウント",
             "proxy": "プロキシ設定",
             "advanced": "詳細設定",
+            "debug": "デバッグ",
             "about": "情報"
         },
         "general": {
@@ -316,7 +343,60 @@
             "desc": "アカウントリストに表示するモデル配額を選択します。選択していないモデルは詳細ポップアップでのみ表示されます"
         },
         "proxy": {
-            "title": "プロキシ設定"
+            "title": "APIプロキシサービス"
+        },
+        "proxy_pool": {
+            "title": "プロキシプール",
+            "strategy_priority": "優先度順",
+            "strategy_round_robin": "ラウンドロビン",
+            "strategy_random": "ランダム",
+            "strategy_least_connections": "最小接続数",
+            "test_all": "すべてテスト",
+            "batch_import": "インポート",
+            "binding_manager": "バインディング",
+            "add_proxy": "プロキシを追加",
+            "edit_proxy": "プロキシを編集",
+            "name": "名前",
+            "url": "プロキシURL",
+            "username": "ユーザー名",
+            "password": "パスワード",
+            "max_accounts": "最大アカウント数",
+            "max_accounts_hint": "0 = 無制限",
+            "priority": "優先度",
+            "priority_hint": "小さいほど優先",
+            "health_check_url": "ヘルスチェックURL",
+            "tags": "タグ",
+            "add_tag_placeholder": "タグを追加...",
+            "seconds": "秒",
+            "test_completed": "ヘルスチェック完了",
+            "test_failed": "ヘルスチェック失敗",
+            "confirm_delete": "このプロキシを削除してもよろしいですか？",
+            "empty": "プロキシがありません",
+            "column_priority": "優先度",
+            "column_status": "ステータス",
+            "column_details": "プロキシ詳細",
+            "column_bindings": "バインディング",
+            "import_title": "プロキシの一括インポート",
+            "import_label": "プロキシリストを貼り付け（1行に1つ）",
+            "import_hint": "対応形式: protocol://user:pass@host:port, host:port:user:pass",
+            "import_preview": "プレビュー",
+            "import_confirm": "{{count}} 個のプロキシをインポート",
+            "no_valid_proxies": "有効なプロキシが見つかりません",
+            "binding": {
+                "title": "アカウントプロキシバインディング",
+                "load_failed": "バインディングの読み込みに失敗しました",
+                "unbind_success": "バインド解除しました",
+                "bind_success": "バインドしました",
+                "update_failed": "バインディングの更新に失敗しました",
+                "assigned_proxy": "割り当て済みプロキシ",
+                "default_strategy": "デフォルト（戦略に従う）"
+            },
+            "status": {
+                "inactive": "非アクティブ",
+                "checking": "確認中",
+                "healthy": "正常",
+                "timeout": "タイムアウト"
+            }
         },
         "advanced": {
             "title": "詳細設定",
@@ -348,6 +428,14 @@
             "clear_logs_title": "ログクリアの確認",
             "clear_logs_msg": "すべてのログキャッシュファイルをクリアしてもよろしいですか？",
             "logs_cleared": "ログキャッシュをクリアしました",
+            "antigravity_cache_title": "Antigravityキャッシュクリア",
+            "antigravity_cache_desc": "Antigravityアプリのキャッシュをクリアすると、ログイン失敗、バージョン検証エラー、OAuth認証失敗などの問題を解決できます。",
+            "antigravity_cache_warning": "キャッシュをクリアする前にAntigravityアプリを完全に終了してください。",
+            "clear_antigravity_cache": "Antigravityキャッシュをクリア",
+            "clear_cache_confirm_title": "Antigravityキャッシュのクリアを確認",
+            "clear_cache_confirm_msg": "以下のキャッシュディレクトリがクリアされます：",
+            "cache_cleared_success": "キャッシュをクリアしました。{{size}} MB 解放されました",
+            "cache_not_found": "Antigravityキャッシュディレクトリが見つかりません",
             "http_api_desc": "外部プログラム（VS Codeプラグインなど）用のローカルHTTPインターフェースを提供します。",
             "http_api_enabled": "HTTP APIを有効にする",
             "http_api_enabled_desc": "有効にすると、外部プログラムがHTTPインターフェースを介してアカウントを管理できるようになります",
@@ -358,6 +446,18 @@
             "http_api_restart_required": "⚠️ 適用するには再起動が必要です",
             "http_api_settings_saved": "HTTP API設定を保存しました。適用するには再起動が必要です",
             "http_api_title": "HTTP APIサービス"
+        },
+        "debug": {
+            "title": "デバッグコンソール",
+            "desc": "デバッグやトラブルシューティング用のリアルタイムアプリログを表示",
+            "enabled": "有効",
+            "disabled": "無効",
+            "disabled_hint": "デバッグコンソールはオフです",
+            "disabled_desc": "有効にするとアプリログのリアルタイム記録を開始します",
+            "console_title": "デバッグコンソール",
+            "console_desc": "問題のトラブルシューティング用にリアルタイムアプリログを表示します。",
+            "enable_desc": "有効にするとバックエンドログをキャプチャして表示します。",
+            "open_btn": "コンソールを開く"
         },
         "about": {
             "title": "情報",
@@ -379,7 +479,26 @@
             "support_desc": "このプロジェクトがお役に立てば、コーヒーを一杯ご馳走してください！皆様のサポートが、プロジェクトを継続する最大の動機です。",
             "support_alipay": "Alipay",
             "support_wechat": "WeChat Pay",
-            "support_buymeacoffee": "Buy Me a Coffee"
+            "support_buymeacoffee": "コーヒーを奢る"
+        },
+        "thinking_budget": {
+            "title": "思考予算 (Thinking Budget)",
+            "description": "AI の思考 Token 予算を制御します。一部のモデル（Flash、-thinking サフィックスなど）は、アップストリームにより 24576 の上限があります。",
+            "mode_label": "処理モード",
+            "mode": {
+                "auto": "自動制限",
+                "auto_desc": "スマート制限",
+                "passthrough": "パススルー",
+                "passthrough_desc": "制限なし",
+                "custom": "カスタム",
+                "custom_desc": "固定値"
+            },
+            "auto_hint": "自動モード: Flash モデル、-thinking サフィックスモデル、および Web Search が有効なリクエストに対して、API エラーを避けるため自動的に 24576 に制限します。その他のモデルは元のリクエスト値を保持します。",
+            "passthrough_warning": "パススルーモード: 呼び出し元の thinking_budget 値を直接使用し、制限を一切行いません。アップストリーム API が高い値をサポートしていない場合、リクエストが失敗する可能性があります。",
+            "custom_value_label": "カスタム値",
+            "custom_value_hint": "範囲: 1024 - 65536。推奨値: 24576 (Flash 上限) または 51200 (標準の拡張思考)。",
+            "high_value_warning": "現在の値が 24576 を超えています。一部のモデル（Flash、-thinking）ではサポートされず、リクエストが失敗する可能性があります。",
+            "tokens": "tokens"
         },
         "quota_protection": {
             "auto_restore_info": "クォータがリセットされると、アカウントは自動的に再度有効になります",
@@ -414,6 +533,9 @@
     },
     "proxy": {
         "title": "APIプロキシサービス",
+        "error": {
+            "load_failed": "設定の読み込みに失敗しました"
+        },
         "status": {
             "running": "サービス稼働中",
             "stopped": "サービス停止中",
@@ -426,6 +548,12 @@
         },
         "config": {
             "title": "サービス構成",
+            "request": {
+                "user_agent": "User-Agent オーバーライド",
+                "user_agent_tooltip": "アップストリームAPIに送信するUser-Agentヘッダーを上書きします。空欄の場合はデフォルトを使用します。",
+                "user_agent_hint": "現在のデフォルト: antigravity/<version> <os>/<arch>",
+                "user_agent_placeholder": "カスタムUser-Agent文字列を入力..."
+            },
             "port": "リスニングポート",
             "port_tooltip": "ローカルAPIプロキシがリッスンするTCPポート。変更するにはサービスを停止し、再起動して適用してください。",
             "port_hint": "デフォルト 8045、適用には再起動が必要",
@@ -706,12 +834,37 @@
             "title": "モデルルーター",
             "subtitle": "シリーズごとにモデルをルーティングするか、カスタムマッピングを追加します。\n注: ネイティブなClaudeパススルーモデル (例: claude-opus-4-5-thinking) はデフォルトでシリーズグループをバイパスします。上書きするには「エキスパートカスタムルーティング」を使用してください。",
             "subtitle_simple": "ワイルドカードまたは完全一致マッピングでモデルルーティングをカスタマイズ",
-            "background_task_title": "Background Task Model",
-            "background_task_desc": "Model used for Claude CLI background tasks like title generation, summary, etc. (Default: gemini-2.5-flash)",
-            "use_default": "Use System Default",
-            "current_model": "Current Model",
+            "background_task_title": "バックグラウンドタスク用モデル",
+            "background_task_desc": "タイトル生成や要約など、Claude CLIのバックグラウンドタスクに使用されるモデル (デフォルト: gemini-2.5-flash)",
+            "use_default": "システムデフォルトを使用",
+            "current_model": "現在のモデル",
             "apply_presets": "プリセットを適用",
             "presets_applied": "プリセットを正常に適用しました",
+            "preset_default": "デフォルト",
+            "preset_default_desc": "GPT-4 → Gemini Pro, Claude → Opus",
+            "preset_performance": "性能優先",
+            "preset_performance_desc": "すべてに高性能モデルを使用",
+            "preset_cost": "コスト最適化",
+            "preset_cost_desc": "経済的なモデルを優先",
+            "preset_balanced": "バランス",
+            "preset_balanced_desc": "性能とコストのバランス",
+            "built_in_presets": "組み込みプリセット",
+            "custom_presets": "カスタムプリセット",
+            "apply_selected": "選択したものを適用",
+            "add_preset": "現在のマッピングを保存",
+            "delete_preset": "現在のプリセットを削除",
+            "cannot_delete_builtin": "組み込みプリセットは削除できません",
+            "no_mapping_to_save": "保存するマッピング設定がありません",
+            "preset_name_required": "プリセット名が必要です",
+            "preset_saved": "プリセットが正常に保存されました",
+            "manage_presets_title": "カスタムプリセットの管理",
+            "save_current_as_preset": "現在の設定を保存",
+            "preset_name_placeholder": "プリセット名を入力...",
+            "save_hint": "現在アクティブなモデルマッピングを再利用可能なプリセットとして保存します。",
+            "your_presets": "あなたのプリセット",
+            "no_custom_presets": "カスタムプリセットはまだありません",
+            "mappings_count": "個のマッピング",
+            "custom_preset_desc": "ユーザー定義プリセット",
             "custom_mappings": "カスタムマッピング",
             "group_title": "シリーズグループ",
             "gemini3_group_label": "Gemini 3 (推奨)",
@@ -869,19 +1022,54 @@
             "clear_msg": "すべてのプロキシログをクリアしてもよろしいですか？この操作は取り消せません。"
         },
         "network": {
-            "title": "ネットワークモニター"
+            "title": "ネットワークモニター",
+            "open": "ネットワークモニターを開く",
+            "requests_count": "{{count}} 件",
+            "start_recording": "記録を開始",
+            "stop_recording": "記録を停止",
+            "clear_requests": "リクエストをクリア",
+            "empty": "記録されたリクエストはありません",
+            "waiting": "応答待ち...",
+            "badge_error": "エラー",
+            "table": {
+                "status": "状態",
+                "command": "コマンド",
+                "time": "時刻",
+                "duration": "所要時間"
+            },
+            "sections": {
+                "general": "概要",
+                "request_args": "リクエスト引数",
+                "error_details": "エラー詳細",
+                "response": "レスポンス"
+            },
+            "fields": {
+                "status": "状態",
+                "start_time": "開始時刻",
+                "duration": "所要時間"
+            }
         }
     },
     "update_notification": {
         "title": "新しいバージョンが利用可能です",
         "message": "最適化と改善が含まれた新しいバージョンの準備ができました。現在のバージョン: v{{current}}",
-        "action": "今すぐ更新"
+        "ready": "更新の準備ができました",
+        "downloading": "更新をダウンロード中...",
+        "restarting": "アプリを再起動中...",
+        "auto_update": "自動更新",
+        "toast": {
+            "not_ready": "自動更新パッケージの準備ができていません。ダウンロードページにリダイレクトします...",
+            "failed": "自動更新に失敗しました。ダウンロードページにリダイレクトします..."
+        }
     },
     "login": {
         "title": "セキュアアクセス制御",
         "desc": "現在 Web モードで実行されています。管理パスワードまたは API キーを入力してアクセスしてください。",
         "placeholder": "管理パスワードまたは API キーを入力してください",
         "btn_login": "認証してアクセス",
+        "btn_verifying": "認証中...",
+        "error_invalid_key": "パスワードまたは API キーが無効です。再試行してください",
+        "error_network": "ネットワーク接続に失敗しました。サービスが実行中か確認してください",
         "note": "注意：独立した管理パスワードが設定されている場合は管理パスワードを入力してください。そうでない場合は API_KEY を入力してください。",
         "lookup_hint": "お忘れの場合は、docker logs antigravity-manager を実行して Current API Key または Web UI Password を探してください",
         "config_hint": "または grep -E '\"api_key\"|\"admin_password\"' ~/.antigravity_tools/gui_config.json を実行して確認してください。"
@@ -912,5 +1100,143 @@
         "total": "合計",
         "percentage": "割合",
         "no_data": "データなし"
+    },
+    "security": {
+        "title": "セキュリティ監視",
+        "refresh_data": "データ更新",
+        "refresh": "更新",
+        "tab_logs": "アクセスログ",
+        "tab_stats": "統計分析",
+        "tab_blacklist": "ブラックリスト",
+        "tab_whitelist": "ホワイトリスト",
+        "tab_config": "セキュリティ設定",
+        "stats": {
+            "total_requests": "総リクエスト数",
+            "total_requests_desc": "記録されたすべてのリクエスト",
+            "unique_ips": "ユニークIP数",
+            "unique_ips_desc": "異なるクライアントIPアドレス",
+            "blocked_requests": "ブロックされたリクエスト",
+            "blocked_requests_desc": "ルールによって拒否されたリクエスト",
+            "ip_activity_token_usage": "IPアクティビティとトークン使用量",
+            "hour": "時",
+            "day": "日",
+            "week": "週",
+            "month": "月",
+            "rank": "ランク",
+            "ip_address": "IPアドレス",
+            "activity_reqs": "アクティビティ (リクエスト)",
+            "total_token": "総トークン",
+            "prompt": "プロンプト",
+            "completion": "完了",
+            "no_data": "データなし"
+        },
+        "logs": {
+            "search_placeholder": "IP、パス、UAで検索...",
+            "username": "ユーザー",
+            "show_blocked_only": "ブロックのみ表示",
+            "status": "ステータス",
+            "ip_address": "IPアドレス",
+            "method": "メソッド",
+            "path": "パス",
+            "duration": "所要時間",
+            "time": "時間",
+            "reason": "理由",
+            "blocked": "ブロック",
+            "no_logs": "ログなし",
+            "total_records": "全 {{total}} 件",
+            "prev_page": "前へ",
+            "next_page": "次へ",
+            "page_num": "ページ {{page}}",
+            "per_page_suffix": "/ページ"
+        },
+        "blacklist": {
+            "add_ip": "IPを追加",
+            "search_placeholder": "検索...",
+            "added_at": "追加日時",
+            "expires_at": "有効期限",
+            "no_data": "ブラックリストデータなし",
+            "add_title": "ブラックリストに追加",
+            "ip_cidr_label": "IPアドレスまたはCIDR",
+            "ip_cidr_placeholder": "例: 192.168.1.1 または 10.0.0.0/24",
+            "reason_label": "理由 (任意)",
+            "reason_placeholder": "例: 悪意のあるスキャン",
+            "expires_label": "有効期限 (時間、任意)",
+            "expires_placeholder": "空欄で無期限",
+            "cancel": "キャンセル",
+            "confirm": "追加",
+            "add_btn": "追加"
+        },
+        "whitelist": {
+            "add_ip": "信頼IPを追加",
+            "no_data": "ホワイトリストデータなし",
+            "add_title": "ホワイトリストに追加",
+            "description_label": "説明 (任意)",
+            "description_placeholder": "例: 内部サーバー",
+            "cancel": "キャンセル",
+            "confirm": "追加",
+            "add_btn": "追加"
+        },
+        "config": {
+            "title": "セキュリティ設定",
+            "save": "変更を保存",
+            "saving": "保存中...",
+            "blacklist_title": "IPブラックリスト",
+            "blacklist_desc": "ブロックされたIPアドレスとルールを管理します。",
+            "enable_blacklist": "ブラックリスト保護を有効化",
+            "block_msg_label": "カスタムブロックメッセージ",
+            "block_msg_desc": "ブロックされたクライアントに返されるレスポンス内容。",
+            "whitelist_title": "IPホワイトリスト",
+            "whitelist_desc": "信頼されたIPアドレスを管理します。",
+            "enable_whitelist": "ホワイトリストモードを有効化",
+            "whitelist_warning": "警告: ホワイトリストモードを有効にすると、ホワイトリストにないIPからのすべてのリクエストがブロックされます。プロキシ経由でアクセスしている場合は、自分自身を締め出さないように注意してください。",
+            "whitelist_priority": "ホワイトリスト優先 (ブラックリストを上書き)",
+            "whitelist_priority_desc": "有効にすると、ブラックリストルールに一致してもホワイトリストIPは許可されます。",
+            "load_error": "設定の読み込みに失敗しました",
+            "save_success": "設定を保存しました",
+            "save_error": "設定の保存に失敗しました"
+        }
+    },
+    "errors": {
+        "stream": {
+            "timeout_error": "リクエストがタイムアウトしました。ネットワーク接続を確認してください",
+            "connection_error": "接続に失敗しました。ネットワークまたはプロキシ設定を確認してください",
+            "decode_error": "ネットワークが不安定なため、データ転送が中断されました。1) ネットワークを確認 2) プロキシを切り替え 3) 再試行 してください",
+            "stream_error": "ストリーム転送エラーが発生しました。後でもう一度お試しください",
+            "unknown_error": "不明なエラーが発生しました。後でもう一度お試しください"
+        }
+    },
+    "user_token": {
+        "title": "ユーザー Token 管理",
+        "total_users": "総ユーザー数",
+        "active_tokens": "アクティブな Token",
+        "total_created": "累計作成数",
+        "create": "Token を作成",
+        "username": "ユーザー名",
+        "token": "Token",
+        "expires": "有効期限",
+        "usage": "使用量",
+        "ip_limit": "IP 制限",
+        "created": "作成日時",
+        "today_requests": "本日のリクエスト数",
+        "never": "期限なし",
+        "renew": "更新",
+        "renew_button": "更新",
+        "unlimited": "制限なし",
+        "create_title": "新しい Token の作成",
+        "description": "説明",
+        "curfew": "夜間制限 (サービス停止時間帯)",
+        "edit_title": "Token の編集",
+        "username_required": "ユーザー名は必須です",
+        "renew_success": "更新に成功しました",
+        "expires_day": "1 日",
+        "expires_week": "1 週間",
+        "expires_month": "1 ヶ月",
+        "expires_never": "期限なし",
+        "no_data": "データがありません",
+        "placeholder_username": "例: user1",
+        "placeholder_desc": "備考 (任意)",
+        "placeholder_max_ips": "0 = 無制限",
+        "hint_max_ips": "0 は制限なしを意味します",
+        "hint_curfew": "空欄で無効。サーバー時間に基づきます。"
     }
 }

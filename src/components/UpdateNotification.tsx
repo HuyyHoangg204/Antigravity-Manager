@@ -12,6 +12,7 @@ interface UpdateInfo {
   latest_version: string;
   current_version: string;
   download_url: string;
+  source?: string;
 }
 
 type UpdateState = 'checking' | 'available' | 'downloading' | 'ready' | 'none';
@@ -86,13 +87,13 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
         // Native updater found no update (e.g. draft release or updater.json not ready)
         // Fallback to manual download
         console.warn('Native updater returned null, falling back to manual download');
-        showToast('自动更新包尚未就绪，为您跳转到下载页面...', 'info');
+        showToast(t('update_notification.toast.not_ready'), 'info');
         setUpdateState('available');
         handleManualDownload();
       }
     } catch (error) {
       console.error('Auto update failed:', error);
-      showToast('自动更新失败，为您跳转到下载页面...', 'error');
+      showToast(t('update_notification.toast.failed'), 'error');
       setUpdateState('available'); // Revert state so user can try again
       handleManualDownload();
     }
@@ -149,13 +150,20 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
               <div>
                 <h3 className="font-bold text-gray-800 dark:text-white leading-tight">
                   {updateState === 'ready'
-                    ? t('update_notification.ready', '更新完成')
+                    ? t('update_notification.ready')
                     : t('update_notification.title')}
                 </h3>
                 {updateInfo && (
-                  <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                    v{updateInfo.latest_version}
-                  </p>
+                  <div className="flex flex-col">
+                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                      v{updateInfo.latest_version}
+                    </p>
+                    {updateInfo.source && updateInfo.source !== 'GitHub API' && (
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                        via {updateInfo.source}
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -178,8 +186,8 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
 
           <div className="mb-4">
             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
-              {updateState === 'downloading' && t('update_notification.downloading', '正在下载更新...')}
-              {updateState === 'ready' && t('update_notification.restarting', '即将重启应用...')}
+              {updateState === 'downloading' && t('update_notification.downloading')}
+              {updateState === 'ready' && t('update_notification.restarting')}
               {updateState === 'available' && updateInfo && t('update_notification.message', { current: updateInfo.current_version })}
             </p>
           </div>
@@ -213,7 +221,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ onClose 
                 "
               >
                 <Download className="w-4 h-4" />
-                <span>{t('update_notification.auto_update', '自动更新')}</span>
+                <span>{t('update_notification.auto_update')}</span>
                 <ArrowRight className="w-4 h-4 opacity-0 -translate-x-2 group-hover/btn:opacity-100 group-hover/btn:translate-x-0 transition-all duration-300" />
                 <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent z-20 pointer-events-none" />
               </button>

@@ -6,6 +6,7 @@ use super::utils::to_claude_usage;
 use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 // use crate::proxy::mappers::signature_store::store_thought_signature; // Deprecated
 use crate::proxy::SignatureCache;
+use crate::proxy::common::client_adapter::{ClientAdapter, SignatureBufferStrategy}; // [NEW]
 use bytes::Bytes;
 use serde_json::{json, Value};
 
@@ -230,6 +231,7 @@ pub struct StreamingState {
     pub has_thinking: bool,
     pub has_content: bool,
     pub message_count: usize, // [NEW v4.0.0] Message count for rewind detection
+    pub client_adapter: Option<std::sync::Arc<dyn ClientAdapter>>, // [FIX] Remove Box, use Arc<dyn> directly
 }
 
 impl StreamingState {
@@ -257,7 +259,13 @@ impl StreamingState {
             has_thinking: false,
             has_content: false,
             message_count: 0,
+            client_adapter: None,
         }
+    }
+
+    // [NEW] Set client adapter
+    pub fn set_client_adapter(&mut self, adapter: Option<std::sync::Arc<dyn ClientAdapter>>) {
+        self.client_adapter = adapter;
     }
 
     /// 发送 SSE 事件
@@ -593,19 +601,15 @@ impl StreamingState {
             );
 
             // [FIX] Explicitly signal error to client to prevent UI freeze
-            // Using "network_error" type to suggest network/proxy issues
+            // using standard SSE error event format
+            // data: {"type": "error", "error": {...}}
             chunks.push(self.emit(
                 "error",
                 json!({
                     "type": "error",
                     "error": {
-                        "type": "network_error",
-                        "message": "网络连接不稳定,请检查您的网络或代理设置。",
-                        "code": "stream_decode_error",
-                        "details": {
-                            "error_count": self.parse_error_count,
-                            "suggestion": "请尝试: 1) 检查网络连接 2) 更换代理节点 3) 稍后重试"
-                        }
+                        "type": "overloaded_error", // Use standard type
+                        "message": "网络连接不稳定，请检查您的网络或代理设置。",
                     }
                 }),
             ));
@@ -765,6 +769,11 @@ impl<'a> PartProcessor<'a> {
             );
         }
 
+        // [NEW] Apply Client Adapter Strategy
+        let use_fifo = self.state.client_adapter.as_ref()
+            .map(|a| a.signature_buffer_strategy() == SignatureBufferStrategy::Fifo)
+            .unwrap_or(false);
+
         // [IMPROVED] Store signature to global cache
         if let Some(ref sig) = signature {
             // 1. Cache family if we know the model
@@ -774,15 +783,21 @@ impl<'a> PartProcessor<'a> {
 
             // 2. [NEW v3.3.17] Cache to session-based storage for tool loop recovery
             if let Some(session_id) = &self.state.session_id {
+                // If FIFO strategy is enabled, use a unique index for each signature (e.g. timestamp or counter)
+                // However, our cache implementation currently keys by session_id.
+                // For FIFO, we might just rely on the fact that we are processing in order.
+                // But specifically for opencode, it might be calling tools in parallel or sequence.
+                
                 SignatureCache::global().cache_session_signature(
                     session_id, 
                     sig.clone(), 
                     self.state.message_count
                 );
                 tracing::debug!(
-                    "[Claude-SSE] Cached signature to session {} (length: {})",
+                    "[Claude-SSE] Cached signature to session {} (length: {}) [FIFO: {}]",
                     session_id,
-                    sig.len()
+                    sig.len(),
+                    use_fifo
                 );
             }
 
@@ -793,6 +808,9 @@ impl<'a> PartProcessor<'a> {
         }
 
         // 暂存签名 (for local block handling)
+        // If FIFO, we strictly follow the sequence. The default logic is effectively LIFO for a single turn 
+        // (store latest, consume at end). 
+        // For opencode, we just want to ensure we capture IT.
         self.state.store_signature(signature);
 
         chunks

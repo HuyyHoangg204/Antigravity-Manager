@@ -1,6 +1,6 @@
 import i18n from '../i18n';
+import { Account, DeviceProfile, DeviceProfileVersion, QuotaData } from '../types/account';
 import { request as invoke } from '../utils/request';
-import { Account, QuotaData, DeviceProfile, DeviceProfileVersion } from '../types/account';
 
 // 检查环境 (可选)
 function ensureTauriEnvironment() {
@@ -174,5 +174,24 @@ export async function warmUpAllAccounts(): Promise<string> {
 
 export async function warmUpAccount(accountId: string): Promise<string> {
     return await invoke('warm_up_account', { accountId });
+}
+
+// 导出账号相关
+export interface ExportAccountItem {
+    email: string;
+    refresh_token: string;
+}
+
+export interface ExportAccountsResponse {
+    accounts: ExportAccountItem[];
+}
+
+export async function exportAccounts(accountIds: string[]): Promise<ExportAccountsResponse> {
+    return await invoke('export_accounts', { accountIds });
+}
+
+// 自定义标签相关
+export async function updateAccountLabel(accountId: string, label: string): Promise<void> {
+    return await invoke('update_account_label', { accountId, label });
 }
 

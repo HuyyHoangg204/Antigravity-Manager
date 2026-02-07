@@ -4,6 +4,9 @@ use regex::Regex;
 /// URL to fetch the latest Antigravity version
 const VERSION_URL: &str = "https://antigravity-auto-updater-974169037036.us-central1.run.app";
 
+/// Second fallback: Official Changelog page
+const CHANGELOG_URL: &str = "https://antigravity.google/changelog";
+
 /// Fallback version derived from Cargo.toml at compile time
 const FALLBACK_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -19,20 +22,59 @@ fn parse_version(text: &str) -> Option<String> {
 }
 
 /// Version source for logging
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum VersionSource {
-    Remote,
+    RemoteAPI,
+    ChangelogWeb,
     CargoToml,
 }
 
-/// Fetch version from remote endpoint, with fallback to Cargo.toml
-/// Uses a separate thread to avoid blocking the main/UI thread
+/// Fetch version from remote API or Changelog website
 fn fetch_remote_version() -> (String, VersionSource) {
-    // [Re-applied Fix] Force use of local Cargo version to ensure stability.
-    // The remote URL might return an older version string, causing "Version Not Supported" errors.
-    
-    // Fallback: Cargo.toml version (always valid at compile time)
+    // 1. Try Version API (Fastest)
+    if let Some(v) = try_fetch_version(VERSION_URL, "version-api-fetch") {
+        return (v, VersionSource::RemoteAPI);
+    }
+
+    // 2. Try Scraping Changelog (Fallback)
+    if let Some(v) = try_fetch_version(CHANGELOG_URL, "changelog-scrape") {
+        return (v, VersionSource::ChangelogWeb);
+    }
+
+    // 3. Fallback: Cargo.toml version (always valid at compile time)
     (FALLBACK_VERSION.to_string(), VersionSource::CargoToml)
+}
+
+/// Helper to fetch and parse version from a URL in a separate thread
+fn try_fetch_version(url: &'static str, thread_name: &str) -> Option<String> {
+    let handle = std::thread::Builder::new()
+        .name(thread_name.to_string())
+        .spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(5))
+                .build()
+                .ok()?;
+
+            let response = client.get(url).send().ok()?;
+            let text = response.text().ok()?;
+            
+            // For changelog, restrict scan to first 5000 chars for efficiency
+            let scan_text = if url == CHANGELOG_URL && text.len() > 5000 {
+                &text[..5000]
+            } else {
+                &text
+            };
+            
+            parse_version(scan_text)
+        });
+
+    match handle {
+        Ok(h) => h.join().ok().flatten(),
+        Err(e) => {
+            tracing::debug!("Failed to spawn {} thread: {}", thread_name, e);
+            None
+        }
+    }
 }
 
 /// Shared User-Agent string for all upstream API requests.

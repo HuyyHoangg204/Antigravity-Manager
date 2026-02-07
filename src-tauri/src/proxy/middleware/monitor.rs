@@ -8,10 +8,30 @@ use std::time::Instant;
 use crate::proxy::server::AppState;
 use crate::proxy::monitor::ProxyRequestLog;
 use serde_json::Value;
+use crate::proxy::middleware::auth::UserTokenIdentity;
 use futures::StreamExt;
 
 const MAX_REQUEST_LOG_SIZE: usize = 100 * 1024 * 1024; // 100MB
 const MAX_RESPONSE_LOG_SIZE: usize = 100 * 1024 * 1024; // 100MB for image responses
+
+/// Helper function to record User Token usage
+fn record_user_token_usage(
+    user_token_identity: &Option<UserTokenIdentity>,
+    log: &ProxyRequestLog,
+    user_agent: Option<String>,
+) {
+    if let Some(identity) = user_token_identity {
+        let _ = crate::modules::user_token_db::record_token_usage_and_ip(
+            &identity.token_id,
+            log.client_ip.as_deref().unwrap_or("127.0.0.1"),
+            log.model.as_deref().unwrap_or("unknown"),
+            log.input_tokens.unwrap_or(0) as i32,
+            log.output_tokens.unwrap_or(0) as i32,
+            log.status as u16,
+            user_agent,
+        );
+    }
+}
 
 pub async fn monitor_middleware(
     State(state): State<AppState>,
@@ -23,12 +43,34 @@ pub async fn monitor_middleware(
     let method = request.method().to_string();
     let uri = request.uri().to_string();
     
-    if uri.contains("event_logging") || uri.contains("/api/") {
+    if uri.contains("event_logging") || uri.contains("/api/") || uri.starts_with("/internal/") {
         return next.run(request).await;
     }
     
     let start = Instant::now();
     
+    // Extract client IP from headers (X-Forwarded-For or X-Real-IP)
+    // IMPORTANT: Extract from Request headers, not Response headers (since we want the client's IP)
+    // Note: We need to do this BEFORE consuming the request body if possible, or extract it from the original request
+    let client_ip = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+        });
+        
+    let user_agent = request
+        .headers()
+        .get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
     let mut model = if uri.contains("/v1beta/models/") {
         uri.split("/v1beta/models/")
             .nth(1)
@@ -39,6 +81,11 @@ pub async fn monitor_middleware(
     };
 
     let request_body_str;
+    
+    // [FIX] 从请求 extensions 提取 UserTokenIdentity (由 Auth 中间件注入)
+    // 必须在处理 request body 之前提取，因为 into_parts() 后需要保留这个值
+    let user_token_identity = request.extensions().get::<UserTokenIdentity>().cloned();
+    
     let request = if method == "POST" {
         let (parts, body) = request.into_parts();
         match axum::body::to_bytes(body, MAX_REQUEST_LOG_SIZE).await {
@@ -66,6 +113,8 @@ pub async fn monitor_middleware(
     };
     
     let response = next.run(request).await;
+    
+    // user_token_identity 已在上面从请求 extensions 中提取
     
     let duration = start.elapsed().as_millis() as u64;
     let status = response.status().as_u16();
@@ -100,6 +149,11 @@ pub async fn monitor_middleware(
         None
     };
 
+    // Client IP has been extracted at the beginning of the function
+
+    // Extract username from UserTokenIdentity if present
+    let username = user_token_identity.as_ref().map(|identity| identity.username.clone());
+
     let monitor = state.monitor.clone();
     let mut log = ProxyRequestLog {
         id: uuid::Uuid::new_v4().to_string(),
@@ -111,13 +165,16 @@ pub async fn monitor_middleware(
         model,
         mapped_model,
         account_email,
+        client_ip,
         error: None,
         request_body: request_body_str,
         response_body: None,
         input_tokens: None,
         output_tokens: None,
         protocol,
+        username,
     };
+
 
     if content_type.contains("text/event-stream") {
         let (parts, body) = response.into_parts();
@@ -281,6 +338,10 @@ pub async fn monitor_middleware(
             if log.status >= 400 {
                 log.error = Some("Stream Error or Failed".to_string());
             }
+
+            // Record User Token Usage
+            record_user_token_usage(&user_token_identity, &log, user_agent.clone());
+
             monitor.log_request(log).await;
         });
 
@@ -320,17 +381,29 @@ pub async fn monitor_middleware(
                 if log.status >= 400 {
                     log.error = log.response_body.clone();
                 }
+
+                // Record User Token Usage
+                record_user_token_usage(&user_token_identity, &log, user_agent.clone());
+
                 monitor.log_request(log).await;
                 Response::from_parts(parts, Body::from(bytes))
             }
             Err(_) => {
                 log.response_body = Some("[Response too large (>100MB)]".to_string());
+
+                // Record User Token Usage (even if too large)
+                record_user_token_usage(&user_token_identity, &log, user_agent.clone());
+
                 monitor.log_request(log).await;
                 Response::from_parts(parts, Body::empty())
             }
         }
     } else {
         log.response_body = Some(format!("[{}]", content_type));
+
+        // Record User Token Usage
+        record_user_token_usage(&user_token_identity, &log, user_agent);
+
         monitor.log_request(log).await;
         response
     }

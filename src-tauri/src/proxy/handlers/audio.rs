@@ -100,7 +100,7 @@ pub async fn handle_audio_transcription(
 
     // 6. 获取 Token 和上游客户端
     let token_manager = state.token_manager;
-    let (access_token, project_id, email, _wait_ms) = token_manager
+    let (access_token, project_id, email, account_id, _wait_ms) = token_manager
         .get_token("text", false, None, &model)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
@@ -120,7 +120,7 @@ pub async fn handle_audio_transcription(
     // 8. 发送请求到 Gemini
     let upstream = state.upstream.clone();
     let response = upstream
-        .call_v1_internal("generateContent", &access_token, wrapped_body, None)
+        .call_v1_internal("generateContent", &access_token, wrapped_body, None, Some(account_id.as_str()))
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, format!("上游请求失败: {}", e)))?;
 

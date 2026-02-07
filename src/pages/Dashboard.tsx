@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { save } from '@tauri-apps/plugin-dialog';
+import { AlertTriangle, ArrowRight, Bot, Download, RefreshCw, Sparkles, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Users, Sparkles, Bot, AlertTriangle, ArrowRight, Download, RefreshCw } from 'lucide-react';
-import { isTauri } from '../utils/env';
-import { useAccountStore } from '../stores/useAccountStore';
-import CurrentAccount from '../components/dashboard/CurrentAccount';
-import BestAccounts from '../components/dashboard/BestAccounts';
 import AddAccountDialog from '../components/accounts/AddAccountDialog';
-import { save } from '@tauri-apps/plugin-dialog';
-import { request as invoke } from '../utils/request';
 import { showToast } from '../components/common/ToastContainer';
+import BestAccounts from '../components/dashboard/BestAccounts';
+import CurrentAccount from '../components/dashboard/CurrentAccount';
+import { exportAccounts } from '../services/accountService';
+import { useAccountStore } from '../stores/useAccountStore';
 import { Account } from '../types/account';
+import { isTauri } from '../utils/env';
+import { request as invoke } from '../utils/request';
 
 function Dashboard() {
     const { t } = useTranslation();
@@ -118,10 +119,16 @@ function Dashboard() {
                 return;
             }
 
-            const exportData = accountsToExport.map(acc => ({
-                email: acc.email,
-                refresh_token: acc.token.refresh_token
-            }));
+            // Get export data from API (contains refresh_token)
+            const accountIds = accountsToExport.map(acc => acc.id);
+            const response = await exportAccounts(accountIds);
+
+            if (!response.accounts || response.accounts.length === 0) {
+                showToast(t('dashboard.toast.export_no_accounts'), 'warning');
+                return;
+            }
+
+            const exportData = response.accounts;
             const content = JSON.stringify(exportData, null, 2);
             const fileName = `antigravity_accounts_${new Date().toISOString().split('T')[0]}.json`;
 
@@ -186,9 +193,10 @@ function Dashboard() {
                             className={`px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5 shadow-sm ${isRefreshing || !currentAccount ? 'opacity-70 cursor-not-allowed' : ''}`}
                             onClick={handleRefreshCurrent}
                             disabled={isRefreshing || !currentAccount}
+                            title={isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                            {isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}
+                            <span className="hidden sm:inline">{isRefreshing ? t('dashboard.refreshing') : t('dashboard.refresh_quota')}</span>
                         </button>
                     </div>
                 </div>
