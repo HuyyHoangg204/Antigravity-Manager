@@ -429,7 +429,7 @@ function AccountRowContent({
                                     onChange={(e) => setLabelInput(e.target.value)}
                                     onKeyDown={handleKeyDown}
                                     autoFocus
-                                    maxLength={20}
+                                    maxLength={15}
                                     onClick={(e) => e.stopPropagation()}
                                 />
                                 <button

@@ -16,9 +16,9 @@ pub struct OpenAIRequest {
     pub n: Option<u32>, // [NEW] 支持多候选结果数量
     #[serde(rename = "max_tokens")]
     pub max_tokens: Option<u32>,
-    pub temperature: Option<f32>,
+    pub temperature: Option<f64>,
     #[serde(rename = "top_p")]
-    pub top_p: Option<f32>,
+    pub top_p: Option<f64>,
     pub stop: Option<Value>,
     pub response_format: Option<ResponseFormat>,
     #[serde(default)]

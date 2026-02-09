@@ -58,7 +58,10 @@ pub async fn handle_warmup(
             StatusCode::OK,
             Json(WarmupResponse {
                 success: true,
-                message: format!("Skipped warmup for {} (2.5 models not supported)", req.model),
+                message: format!(
+                    "Skipped warmup for {} (2.5 models not supported)",
+                    req.model
+                ),
                 error: None,
             }),
         )
@@ -71,28 +74,29 @@ pub async fn handle_warmup(
     );
 
     // ===== 步骤 1: 获取 Token =====
-    let (access_token, project_id, account_id) = if let (Some(at), Some(pid)) = (&req.access_token, &req.project_id) {
-        (at.clone(), pid.clone(), String::new())
-    } else {
-        match state.token_manager.get_token_by_email(&req.email).await {
-            Ok((at, pid, _, acc_id, _wait_ms)) => (at, pid, acc_id),
-            Err(e) => {
-                warn!(
-                    "[Warmup-API] Step 1 FAILED: Token error for {}: {}",
-                    req.email, e
-                );
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(WarmupResponse {
-                        success: false,
-                        message: format!("Failed to get token for {}", req.email),
-                        error: Some(e),
-                    }),
-                )
-                    .into_response();
+    let (access_token, project_id, account_id) =
+        if let (Some(at), Some(pid)) = (&req.access_token, &req.project_id) {
+            (at.clone(), pid.clone(), String::new())
+        } else {
+            match state.token_manager.get_token_by_email(&req.email).await {
+                Ok((at, pid, _, acc_id, _wait_ms)) => (at, pid, acc_id),
+                Err(e) => {
+                    warn!(
+                        "[Warmup-API] Step 1 FAILED: Token error for {}: {}",
+                        req.email, e
+                    );
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(WarmupResponse {
+                            success: false,
+                            message: format!("Failed to get token for {}", req.email),
+                            error: Some(e),
+                        }),
+                    )
+                        .into_response();
+                }
             }
-        }
-    };
+        };
 
     // ===== 步骤 2: 根据模型类型构建请求体 =====
     let is_claude = req.model.to_lowercase().contains("claude");
@@ -100,7 +104,8 @@ pub async fn handle_warmup(
 
     let body: Value = if is_claude {
         // Claude 模型：使用 transform_claude_request_in 转换
-        let session_id = format!("warmup_{}_{}",
+        let session_id = format!(
+            "warmup_{}_{}",
             chrono::Utc::now().timestamp_millis(),
             &uuid::Uuid::new_v4().to_string()[..8]
         );
@@ -149,7 +154,8 @@ pub async fn handle_warmup(
         }
     } else {
         // Gemini 模型：使用 wrap_request
-        let session_id = format!("warmup_{}_{}",
+        let session_id = format!(
+            "warmup_{}_{}",
             chrono::Utc::now().timestamp_millis(),
             &uuid::Uuid::new_v4().to_string()[..8]
         );
@@ -191,14 +197,26 @@ pub async fn handle_warmup(
 
     let mut result = state
         .upstream
-        .call_v1_internal(method, &access_token, body.clone(), query, Some(account_id.as_str()))
+        .call_v1_internal(
+            method,
+            &access_token,
+            body.clone(),
+            query,
+            Some(account_id.as_str()),
+        )
         .await;
 
     // 如果流式请求失败，尝试非流式请求
     if result.is_err() && !prefer_non_stream {
         result = state
             .upstream
-            .call_v1_internal("generateContent", &access_token, body, None, Some(account_id.as_str()))
+            .call_v1_internal(
+                "generateContent",
+                &access_token,
+                body,
+                None,
+                Some(account_id.as_str()),
+            )
             .await;
     }
 
@@ -206,7 +224,8 @@ pub async fn handle_warmup(
 
     // ===== 步骤 4: 处理响应并记录流量日志 =====
     match result {
-        Ok(response) => {
+        Ok(call_result) => {
+            let response = call_result.response;
             let status = response.status();
             let status_code = status.as_u16();
 
@@ -222,8 +241,15 @@ pub async fn handle_warmup(
                 mapped_model: Some(req.model.clone()),
                 account_email: Some(req.email.clone()),
                 client_ip: Some("127.0.0.1".to_string()),
-                error: if status.is_success() { None } else { Some(format!("HTTP {}", status_code)) },
-                request_body: Some(format!("{{\"type\": \"warmup\", \"model\": \"{}\"}}", req.model)),
+                error: if status.is_success() {
+                    None
+                } else {
+                    Some(format!("HTTP {}", status_code))
+                },
+                request_body: Some(format!(
+                    "{{\"type\": \"warmup\", \"model\": \"{}\"}}",
+                    req.model
+                )),
                 response_body: None,
                 input_tokens: Some(0),
                 output_tokens: Some(0),
@@ -288,7 +314,10 @@ pub async fn handle_warmup(
                 account_email: Some(req.email.clone()),
                 client_ip: Some("127.0.0.1".to_string()),
                 error: Some(e.clone()),
-                request_body: Some(format!("{{\"type\": \"warmup\", \"model\": \"{}\"}}", req.model)),
+                request_body: Some(format!(
+                    "{{\"type\": \"warmup\", \"model\": \"{}\"}}",
+                    req.model
+                )),
                 response_body: None,
                 input_tokens: None,
                 output_tokens: None,
@@ -304,7 +333,8 @@ pub async fn handle_warmup(
                     message: "Warmup request failed".to_string(),
                     error: Some(e),
                 }),
-            ).into_response();
+            )
+                .into_response();
 
             // 即使失败也添加响应头，以便监控
             if let Ok(email_val) = axum::http::HeaderValue::from_str(&req.email) {

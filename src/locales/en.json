@@ -495,24 +495,40 @@
             "support_wechat": "WeChat Pay",
             "support_buymeacoffee": "Buy Me a Coffee"
         },
+        "advanced_thinking": {
+            "title": "Advanced Thinking & Global Config",
+            "description": "Manage thinking capabilities, image modes, and global instructions."
+        },
         "thinking_budget": {
             "title": "Thinking Budget",
             "description": "Controls the token budget for AI deep thinking. Some models (e.g., Flash, -thinking suffix models) are limited to 24576 by upstream API.",
             "mode_label": "Processing Mode",
             "mode": {
                 "auto": "Auto Limit",
-                "auto_desc": "Smart limit",
                 "passthrough": "Passthrough",
-                "passthrough_desc": "No limit",
-                "custom": "Custom",
-                "custom_desc": "Fixed value"
+                "custom": "Custom"
             },
-            "auto_hint": "Auto mode: Automatically caps budget to 24576 for Flash models, -thinking suffix models, and Web Search requests to avoid API errors. Other models retain original request values.",
-            "passthrough_warning": "Passthrough mode: Uses the caller's thinking_budget value directly without any limits. May cause request failures if upstream API doesn't support high values.",
-            "custom_value_label": "Custom Value",
-            "custom_value_hint": "Range: 1024 - 65536. Recommended: 24576 (Flash limit) or 51200 (standard extended thinking).",
-            "high_value_warning": "Current value exceeds 24576. Some models (Flash, -thinking) may not support this and requests may fail.",
+            "auto_hint": "Auto mode: Automatically caps budget to 24576 for Flash, -thinking suffix models, and Web Search requests.",
+            "passthrough_warning": "Passthrough: Uses caller's value directly. High values may cause failures.",
+            "custom_value_hint": "Rec: 24576 (Flash) or 51200 (Extended)",
             "tokens": "tokens"
+        },
+        "image_thinking_mode": {
+            "title": "Image Thinking Mode",
+            "hint": "Affects quality and generation flow",
+            "options": {
+                "enabled": "Enabled",
+                "disabled": "Disabled",
+                "enabled_desc": "On: Preserves thinking chain, returns sketch + final image.",
+                "disabled_desc": "Off: Disables thinking chain, generates single ultra-clear image (Quality First)."
+            }
+        },
+        "global_system_prompt": {
+            "title": "Global System Prompt",
+            "hint": "Automatically injected into all systemInstructions",
+            "placeholder": "Enter global system prompt...\nExample: You are a senior full-stack developer. Please respond in English.",
+            "char_count": "{{count}} characters",
+            "long_prompt_warning": "Prompt is quite long (over 2000 chars) and may consume significant context space."
         },
         "branding": {
             "title": "Antigravity Tools",
@@ -662,10 +678,12 @@
             "upstream_proxy": {
                 "title": "Global Upstream Proxy (Global Proxy)",
                 "desc": "When enabled, all external requests (API Proxy, Token Refresh, Quota Check, Update Check) will be routed through this proxy.",
+                "desc_short": "Fallback proxy used when no suitable proxy is found in the pool.",
                 "enable": "Enable Upstream Proxy",
                 "url": "Proxy URL",
                 "url_placeholder": "e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:7890",
                 "tip": "Supports HTTP, HTTPS and SOCKS5.",
+                "socks5h_hint": "To bypass upstream risk control and use Remote DNS resolution, manually change the protocol to socks5h://",
                 "validation_error": "Proxy URL is required when upstream proxy is enabled",
                 "restart_hint": "Proxy settings saved. Restart the app to apply changes."
             },
@@ -740,7 +758,21 @@
                 "sync_confirm_title": "Confirm Sync",
                 "sync_confirm_message": "OpenCode config will be overwritten based on current proxy settings. Continue?",
                 "restore_confirm": "Are you sure you want to restore OpenCode to default settings?",
-                "restore_backup_confirm": "Are you sure you want to restore OpenCode config from backup?"
+                "restore_backup_confirm": "Are you sure you want to restore OpenCode config from backup?",
+                "modal_title": "Select OpenCode Models",
+                "select_models": "Select models to sync",
+                "btn_confirm_sync": "Confirm Sync"
+            },
+            "droid_sync": {
+                "modal_title": "Add models to Droid",
+                "modal_desc": "Selected models will be added as customModels to settings.json",
+                "selected": "selected",
+                "btn_confirm_sync": "Add selected models",
+                "toast": {
+                    "no_models_selected": "Please select at least one model",
+                    "sync_success_count": "Added {{count}} model(s) to Droid",
+                    "sync_error": "Sync failed: {{error}}"
+                }
             }
         },
         "cloudflared": {
@@ -967,6 +999,7 @@
                 "detecting": "Detecting...",
                 "current_base_url": "Current Base URL"
             },
+            "model_select": "Select Model",
             "btn_sync": "Sync Config Now",
             "btn_view": "View Config",
             "btn_restore": "Restore Defaults",

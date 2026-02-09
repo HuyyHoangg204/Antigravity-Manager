@@ -493,24 +493,40 @@
             "support_wechat": "微信支付",
             "support_buymeacoffee": "Buy Me a Coffee"
         },
+        "advanced_thinking": {
+            "title": "高级思维与全局配置",
+            "description": "集中管理思考能力、图像模式及全局指令。"
+        },
         "thinking_budget": {
             "title": "思考预算 (Thinking Budget)",
             "description": "控制 AI 深度思考时的 Token 预算。某些模型（如 Flash、带 -thinking 后缀的模型）受上游 24576 上限限制。",
             "mode_label": "处理模式",
             "mode": {
                 "auto": "自动限制",
-                "auto_desc": "智能限制",
                 "passthrough": "透传",
-                "passthrough_desc": "不做限制",
-                "custom": "自定义",
-                "custom_desc": "固定值"
+                "custom": "自定义"
             },
-            "auto_hint": "自动模式：对 Flash 模型、-thinking 后缀模型、以及启用 Web Search 的请求自动限制在 24576 以避免 API 错误。其他模型保持原始请求值。",
-            "passthrough_warning": "透传模式：直接使用调用方传入的 thinking_budget 值，不做任何限制。如果上游 API 不支持高值可能导致请求失败。",
-            "custom_value_label": "自定义值",
-            "custom_value_hint": "范围：1024 - 65536。推荐值：24576（Flash 上限）或 51200（标准扩展思考）。",
-            "high_value_warning": "当前值超过 24576，某些模型（Flash、-thinking）可能不支持并导致请求失败。",
+            "auto_hint": "自动模式：对 Flash 模型、-thinking 后缀模型、以及启用 Web Search 的请求自动限制在 24576 以避免 API 错误。",
+            "passthrough_warning": "透传：直接使用调用方原始值，不支持高值可能导致失败。",
+            "custom_value_hint": "推荐：24576 (Flash) 或 51200 (扩展)",
             "tokens": "tokens"
+        },
+        "image_thinking_mode": {
+            "title": "图像思维模式 (Image Thinking Mode)",
+            "hint": "影响画质与生成流程",
+            "options": {
+                "enabled": "开启",
+                "disabled": "关闭",
+                "enabled_desc": "开启：保留思维链，返回草图 + 成品双图。",
+                "disabled_desc": "关闭：禁用思维链，直接生成单张超清图片（画质优先）。"
+            }
+        },
+        "global_system_prompt": {
+            "title": "全局系统提示词 (Global System Prompt)",
+            "hint": "自动注入所有请求的 systemInstruction",
+            "placeholder": "输入全局系统提示词...\n例如：你是一位资深的全栈开发工程师，擅长 React 和 Rust。请使用简体中文回复。",
+            "char_count": "{{count}} 字符",
+            "long_prompt_warning": "提示词较长（超过 2000 字符），可能会占用较多的上下文窗口空间。"
         }
     },
     "tray": {
@@ -653,10 +669,12 @@
             "upstream_proxy": {
                 "title": "全局上游代理 (Global Proxy)",
                 "desc": "开启后，应用内所有外部请求（API 反代、Token 刷新、配额查询、更新检测）都将通过此代理。",
+                "desc_short": "用于无法匹配代理池账号时的通用出口或降级方案。",
                 "enable": "启用上游代理",
                 "url": "代理地址",
                 "url_placeholder": "例如: http://127.0.0.1:7890 或 socks5://127.0.0.1:7890",
                 "tip": "支持 HTTP、HTTPS 和 SOCKS5 协议。",
+                "socks5h_hint": "若需避开上游风控并保留原始域名解析 (Remote DNS)，请手动将协议改为 socks5h://",
                 "validation_error": "启用上游代理时必须填写代理地址",
                 "restart_hint": "代理配置已保存，重启应用后生效"
             },
@@ -731,7 +749,21 @@
                 "sync_confirm_title": "确认同步",
                 "sync_confirm_message": "将根据当前反代设置覆盖 OpenCode 配置。确定继续？",
                 "restore_confirm": "确定要将 OpenCode 还原为默认配置吗？",
-                "restore_backup_confirm": "确定要从备份还原 OpenCode 配置吗？"
+                "restore_backup_confirm": "确定要从备份还原 OpenCode 配置吗？",
+                "modal_title": "选择 OpenCode 模型",
+                "select_models": "选择要同步的模型",
+                "btn_confirm_sync": "确认同步"
+            },
+            "droid_sync": {
+                "modal_title": "添加模型到 Droid",
+                "modal_desc": "选中的模型将作为 customModels 写入 settings.json",
+                "selected": "已选",
+                "btn_confirm_sync": "添加所选模型",
+                "toast": {
+                    "no_models_selected": "请至少选择一个模型",
+                    "sync_success_count": "已添加 {{count}} 个模型到 Droid",
+                    "sync_error": "同步失败: {{error}}"
+                }
             }
         },
         "cloudflared": {
@@ -958,6 +990,7 @@
                 "detecting": "检测中...",
                 "current_base_url": "当前接口地址 (Base URL)"
             },
+            "model_select": "选择同步模型",
             "btn_sync": "立即同步配置",
             "btn_view": "查看当前配置",
             "btn_restore": "恢复默认配置",

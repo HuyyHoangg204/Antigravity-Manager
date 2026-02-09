@@ -48,7 +48,7 @@ const SmartWarmup: React.FC<SmartWarmupProps> = ({ config, onChange }) => {
                 <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${config.enabled
                         ? 'bg-orange-500 text-white'
-                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-500'
+                        : 'bg-orange-50 dark:bg-orange-900/20 text-orange-500 group-hover:bg-orange-500 group-hover:text-white'
                         }`}>
                         <Sparkles size={20} />
                     </div>

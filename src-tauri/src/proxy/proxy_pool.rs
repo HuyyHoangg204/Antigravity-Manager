@@ -251,12 +251,7 @@ impl ProxyPoolManager {
 
     /// 构建 reqwest::Proxy 配置
     fn build_proxy_config(&self, entry: &ProxyEntry) -> Result<PoolProxyConfig, String> {
-        // [FIX] Handle missing protocol scheme (e.g. "ip:port" -> "http://ip:port")
-        let url = if !entry.url.contains("://") && !entry.url.is_empty() {
-            format!("http://{}", entry.url)
-        } else {
-            entry.url.clone()
-        };
+        let url = crate::proxy::config::normalize_proxy_url(&entry.url);
 
         let mut proxy = reqwest::Proxy::all(&url)
             .map_err(|e| format!("Invalid proxy URL: {}", e))?;

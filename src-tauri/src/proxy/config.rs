@@ -4,6 +4,23 @@ use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
 // ============================================================================
+// 辅助工具函数
+// ============================================================================
+
+/// 标准化代理 URL，如果缺失协议则默认补全 http://
+pub fn normalize_proxy_url(url: &str) -> String {
+    let url = url.trim();
+    if url.is_empty() {
+        return String::new();
+    }
+    if !url.contains("://") {
+        format!("http://{}", url)
+    } else {
+        url.to_string()
+    }
+}
+
+// ============================================================================
 // 全局 Thinking Budget 配置存储
 // 用于在 request transform 函数中访问配置（无需修改函数签名）
 // ============================================================================
@@ -37,6 +54,91 @@ pub fn update_thinking_budget_config(config: ThinkingBudgetConfig) {
             config.mode,
             config.custom_value
         );
+    }
+}
+
+// ============================================================================
+// 全局系统提示词配置存储
+// 用户可在设置中配置一段全局提示词，自动注入到所有请求的 systemInstruction 中
+// ============================================================================
+static GLOBAL_SYSTEM_PROMPT_CONFIG: OnceLock<RwLock<GlobalSystemPromptConfig>> = OnceLock::new();
+
+/// 获取当前全局系统提示词配置
+pub fn get_global_system_prompt() -> GlobalSystemPromptConfig {
+    GLOBAL_SYSTEM_PROMPT_CONFIG
+        .get()
+        .and_then(|lock| lock.read().ok())
+        .map(|cfg| cfg.clone())
+        .unwrap_or_default()
+}
+
+/// 更新全局系统提示词配置
+pub fn update_global_system_prompt_config(config: GlobalSystemPromptConfig) {
+    if let Some(lock) = GLOBAL_SYSTEM_PROMPT_CONFIG.get() {
+        if let Ok(mut cfg) = lock.write() {
+            *cfg = config.clone();
+            tracing::info!(
+                "[Global-System-Prompt] Config updated: enabled={}, content_len={}",
+                config.enabled,
+                config.content.len()
+            );
+        }
+    } else {
+        // 首次初始化
+        let _ = GLOBAL_SYSTEM_PROMPT_CONFIG.set(RwLock::new(config.clone()));
+        tracing::info!(
+            "[Global-System-Prompt] Config initialized: enabled={}, content_len={}",
+            config.enabled,
+            config.content.len()
+        );
+    }
+}
+
+// ============================================================================
+// 全局图像思维模式配置存储
+// ============================================================================
+static GLOBAL_IMAGE_THINKING_MODE: OnceLock<RwLock<String>> = OnceLock::new();
+
+pub fn get_image_thinking_mode() -> String {
+    GLOBAL_IMAGE_THINKING_MODE
+        .get()
+        .and_then(|lock| lock.read().ok())
+        .map(|s| s.clone())
+        .unwrap_or_else(|| "enabled".to_string())
+}
+
+pub fn update_image_thinking_mode(mode: Option<String>) {
+    let val = mode.unwrap_or_else(|| "enabled".to_string());
+    if let Some(lock) = GLOBAL_IMAGE_THINKING_MODE.get() {
+        if let Ok(mut cfg) = lock.write() {
+            if *cfg != val {
+                *cfg = val.clone();
+                tracing::info!("[Image-Thinking] Global config updated: {}", val);
+            }
+        }
+    } else {
+        let _ = GLOBAL_IMAGE_THINKING_MODE.set(RwLock::new(val.clone()));
+        tracing::info!("[Image-Thinking] Global config initialized: {}", val);
+    }
+}
+
+/// 全局系统提示词配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalSystemPromptConfig {
+    /// 是否启用全局系统提示词
+    #[serde(default)]
+    pub enabled: bool,
+    /// 系统提示词内容
+    #[serde(default)]
+    pub content: String,
+}
+
+impl Default for GlobalSystemPromptConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            content: String::new(),
+        }
     }
 }
 
@@ -434,6 +536,17 @@ pub struct ProxyConfig {
     #[serde(default)]
     pub thinking_budget: ThinkingBudgetConfig,
 
+    /// 全局系统提示词配置
+    /// 自动注入到所有 API 请求的 systemInstruction 中
+    #[serde(default)]
+    pub global_system_prompt: GlobalSystemPromptConfig,
+
+    /// 图像思维模式配置
+    /// - enabled: 保留思维链 (默认)
+    /// - disabled: 移除思维链 (画质优先)
+    #[serde(default)]
+    pub image_thinking_mode: Option<String>,
+
     /// 代理池配置
     #[serde(default)]
     pub proxy_pool: ProxyPoolConfig,
@@ -471,7 +584,9 @@ impl Default for ProxyConfig {
             user_agent_override: None,
             saved_user_agent: None,
             thinking_budget: ThinkingBudgetConfig::default(),
+            global_system_prompt: GlobalSystemPromptConfig::default(),
             proxy_pool: ProxyPoolConfig::default(),
+            image_thinking_mode: None,
         }
     }
 }
@@ -509,40 +624,42 @@ impl ProxyConfig {
     }
 }
 
-
 /// 代理认证信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyAuth {
     pub username: String,
-    #[serde(serialize_with = "crate::utils::crypto::serialize_password", deserialize_with = "crate::utils::crypto::deserialize_password")]
+    #[serde(
+        serialize_with = "crate::utils::crypto::serialize_password",
+        deserialize_with = "crate::utils::crypto::deserialize_password"
+    )]
     pub password: String,
 }
 
 /// 单个代理配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyEntry {
-    pub id: String,                    // 唯一标识
-    pub name: String,                  // 显示名称
-    pub url: String,                   // 代理地址 (http://, https://, socks5://)
-    pub auth: Option<ProxyAuth>,       // 认证信息 (可选)
-    pub enabled: bool,                 // 是否启用
-    pub priority: i32,                 // 优先级 (数字越小优先级越高)
-    pub tags: Vec<String>,             // 标签 (如 "美国", "住宅IP")
-    pub max_accounts: Option<usize>,   // 最大绑定账号数 (0 = 无限制)
+    pub id: String,                       // 唯一标识
+    pub name: String,                     // 显示名称
+    pub url: String,                      // 代理地址 (http://, https://, socks5://)
+    pub auth: Option<ProxyAuth>,          // 认证信息 (可选)
+    pub enabled: bool,                    // 是否启用
+    pub priority: i32,                    // 优先级 (数字越小优先级越高)
+    pub tags: Vec<String>,                // 标签 (如 "美国", "住宅IP")
+    pub max_accounts: Option<usize>,      // 最大绑定账号数 (0 = 无限制)
     pub health_check_url: Option<String>, // 健康检查 URL
-    pub last_check_time: Option<i64>,  // 上次检查时间
-    pub is_healthy: bool,              // 健康状态
-    pub latency: Option<u64>,          // 延迟 (毫秒) [NEW]
+    pub last_check_time: Option<i64>,     // 上次检查时间
+    pub is_healthy: bool,                 // 健康状态
+    pub latency: Option<u64>,             // 延迟 (毫秒) [NEW]
 }
 
 /// 代理池配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyPoolConfig {
-    pub enabled: bool,                 // 是否启用代理池
+    pub enabled: bool, // 是否启用代理池
     // pub mode: ProxyPoolMode,        // [REMOVED] 代理池模式，统一为 Hybrid 逻辑
-    pub proxies: Vec<ProxyEntry>,      // 代理列表
-    pub health_check_interval: u64,    // 健康检查间隔 (秒)
-    pub auto_failover: bool,           // 自动故障转移
+    pub proxies: Vec<ProxyEntry>,         // 代理列表
+    pub health_check_interval: u64,       // 健康检查间隔 (秒)
+    pub auto_failover: bool,              // 自动故障转移
     pub strategy: ProxySelectionStrategy, // 代理选择策略
     /// 账号到代理的绑定关系 (account_id -> proxy_id)，持久化存储
     #[serde(default)]
@@ -563,8 +680,6 @@ impl Default for ProxyPoolConfig {
     }
 }
 
-
-
 /// 代理选择策略
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -579,4 +694,26 @@ pub enum ProxySelectionStrategy {
     LeastConnections,
     /// 加权轮询: 根据健康状态和优先级
     WeightedRoundRobin,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_proxy_url() {
+        // 测试已有协议
+        assert_eq!(normalize_proxy_url("http://127.0.0.1:7890"), "http://127.0.0.1:7890");
+        assert_eq!(normalize_proxy_url("https://proxy.com"), "https://proxy.com");
+        assert_eq!(normalize_proxy_url("socks5://127.0.0.1:1080"), "socks5://127.0.0.1:1080");
+        assert_eq!(normalize_proxy_url("socks5h://127.0.0.1:1080"), "socks5h://127.0.0.1:1080");
+
+        // 测试缺少协议（默认补全 http://）
+        assert_eq!(normalize_proxy_url("127.0.0.1:7890"), "http://127.0.0.1:7890");
+        assert_eq!(normalize_proxy_url("localhost:1082"), "http://localhost:1082");
+
+        // 测试边缘情况
+        assert_eq!(normalize_proxy_url(""), "");
+        assert_eq!(normalize_proxy_url("   "), "");
+    }
 }
