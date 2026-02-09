@@ -12,12 +12,12 @@ RUN if [ "$USE_MIRROR" = "true" ] || ( [ "$USE_MIRROR" = "auto" ] && ! timeout 3
     fi
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
 
 # --- Backend Build Stage ---
-FROM rust:1.85-slim AS backend-builder
+FROM rust:1-slim-bookworm AS backend-builder
 ARG USE_MIRROR=auto
 
 # Conditionally use Aliyun mirror for APT
@@ -32,12 +32,17 @@ RUN if [ "$USE_MIRROR" = "true" ] || ( [ "$USE_MIRROR" = "auto" ] && ! timeout 3
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
+    build-essential \
+    curl \
+    wget \
+    file \
     libssl-dev \
-    libsqlite3-dev \
     libgtk-3-dev \
     libwebkit2gtk-4.1-dev \
     libayatana-appindicator3-dev \
     librsvg2-dev \
+    libsoup-3.0-dev \
+    libjavascriptcoregtk-4.1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Use Aliyun mirror for Cargo if needed (Sparse Index)
@@ -53,6 +58,9 @@ RUN if [ "$USE_MIRROR" = "true" ] || ( [ "$USE_MIRROR" = "auto" ] && ! timeout 3
 WORKDIR /app
 # Copy the whole project to build the Rust workspace
 COPY . .
+
+# Copy frontend dist from builder so Tauri can embed it
+COPY --from=frontend-builder /app/dist ./dist
 
 # Build the Rust backend in release mode (with BuildKit cache)
 WORKDIR /app/src-tauri

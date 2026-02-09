@@ -50,7 +50,7 @@ jobs:
           cache: "npm"
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build the app
         env:
@@ -104,19 +104,12 @@ jobs:
           path: src-tauri/target/**/release/bundle/updater/*.json
           if-no-files-found: warn
 
-      # 2. 直接上传安装包到 GitHub Release (避免 artifact 下载超时)
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 2. 上传安装包到 Artifacts (供后续统一发布任务下载)
+      - name: Upload Release Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "Antigravity Tools ${{ github.ref_name }}"
-          body: "See the assets to download this version and install."
-          draft: false
-          prerelease: false
-          files: |
+          name: release-assets-${{ matrix.platform }}-${{ strategy.job-index }}
+          path: |
             src-tauri/target/**/release/bundle/dmg/*.dmg
             src-tauri/target/**/release/bundle/deb/*.deb
             src-tauri/target/**/release/bundle/appimage/*.AppImage
@@ -131,6 +124,7 @@ jobs:
             src-tauri/target/**/release/bundle/msi/*.sig
             src-tauri/target/**/release/bundle/nsis/*.sig
             src-tauri/target/**/release/bundle/rpm/*.sig
+          if-no-files-found: warn
 
   publish-release:
     needs: build-tauri
@@ -141,68 +135,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 只下载 updater.json 相关的小文件
-      - name: Download updater artifacts
+      # 下载所有构建产物 (仅限 release 相关的 assets 和 updater)
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: updater-json-*
-          path: all-updaters
+          path: all-artifacts
+          pattern: "{release-assets-*,updater-json-*}"
           merge-multiple: true
 
       - name: Extract Release Notes
         run: |
           VERSION="${{ github.ref_name }}"
           echo "Extracting release notes for version $VERSION"
-          
-          # Extract the section, remove leading 4 spaces dedent
           awk -v ver="$VERSION" '
             BEGIN { capture=0 }
-            # Match start line: "    *   **v4.1.0..."
-            $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*" ver { capture=1; next }
-            # Match next version line to stop: "    *   **v..."
-            capture && $0 ~ "^[[:space:]]*\\*[[:space:]]+\\*\\*v" { capture=0; exit }
+            $0 ~ "^[[:space:]]*[*+-][[:space:]]+\\*\\*" ver { capture=1; next }
+            capture && $0 ~ "^[[:space:]]*[*+-][[:space:]]+\\*\\*v" { capture=0; exit }
             capture { print }
-          ' README.md | sed 's/^    //' > release_notes.md
-          
-          # If no notes found, add a default message
+          ' README.md | sed 's/^[[:space:]]\{8\}//' > release_notes.md
           if [ ! -s release_notes.md ]; then
             echo "See the assets to download this version and install." > release_notes.md
           fi
-          
-          echo "Release Notes Content:"
-          cat release_notes.md
 
       - name: Merge updater JSONs
         run: |
           echo "Merging updater.json files..."
           echo "{}" > merged_updater.json
-          
-          # 查找所有下载下来的 json 并合并
-          find all-updaters -name "*.json" -type f | while read json_file; do
+          find all-artifacts -name "*.json" -type f | while read json_file; do
             if jq -e . "$json_file" >/dev/null 2>&1; then
               echo "Merging valid JSON: $json_file..."
               jq -s '.[0] * .[1]' merged_updater.json "$json_file" > temp.json && mv temp.json merged_updater.json
             else
               echo "Skipping invalid JSON: $json_file"
-              cat "$json_file"
             fi
           done
-          
-          echo "Merged JSON content:"
-          cat merged_updater.json
-          
           mv merged_updater.json updater.json
 
-      - name: Upload merged updater.json
-        uses: softprops/action-gh-release@v1
+      # 使用 ncipollo/release-action 进行统一发布，支持稳健覆盖
+      - name: Create or Update GitHub Release
+        uses: ncipollo/release-action@v1
         if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref_name }}
-          body_path: release_notes.md
-          files: updater.json
-          # 确保不覆盖已存在的其他 assets (softprops/action-gh-release 默认是追加)
+          allowUpdates: true
+          name: "Antigravity Tools ${{ github.ref_name }}"
+          bodyFile: "release_notes.md"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "all-artifacts/**/*,updater.json"
+          artifactErrorsFailBuild: false
+          replacesArtifacts: true
+          makeLatest: legacy
 
   docker-build-amd64:
     runs-on: ubuntu-latest

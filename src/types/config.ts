@@ -22,6 +22,8 @@ export interface ProxyConfig {
     user_agent_override?: string;
     saved_user_agent?: string;
     thinking_budget?: ThinkingBudgetConfig;
+    global_system_prompt?: GlobalSystemPromptConfig;
+    image_thinking_mode?: 'enabled' | 'disabled'; // [NEW] 图像思维模式开关
     proxy_pool?: ProxyPoolConfig;
 }
 
@@ -38,6 +40,18 @@ export interface ThinkingBudgetConfig {
     mode: ThinkingBudgetMode;
     /** 自定义固定值（仅在 mode=custom 时生效），范围 1024-65536 */
     custom_value: number;
+}
+
+// ============================================================================
+// 全局系统提示词配置
+// ============================================================================
+
+/** 全局系统提示词配置 */
+export interface GlobalSystemPromptConfig {
+    /** 是否启用 */
+    enabled: boolean;
+    /** 提示词内容 */
+    content: string;
 }
 
 export interface DebugLoggingConfig {
@@ -183,4 +197,5 @@ export interface ProxyPoolConfig {
     health_check_interval: number;
     auto_failover: boolean;
     strategy: ProxySelectionStrategy;
+    account_bindings?: Record<string, string>;
 }

@@ -11,17 +11,18 @@ use crate::proxy::mappers::openai::{
     transform_openai_request, transform_openai_response, OpenAIRequest,
 };
 // use crate::proxy::upstream::client::UpstreamClient; // 通过 state 获取
-use crate::proxy::server::AppState;
 use crate::proxy::debug_logger;
+use crate::proxy::server::AppState;
+use crate::proxy::upstream::client::mask_email;
 
 const MAX_RETRY_ATTEMPTS: usize = 3;
 use super::common::{
     apply_retry_strategy, determine_retry_strategy, should_rotate_account, RetryStrategy,
 };
-use crate::proxy::session_manager::SessionManager;
-use tokio::time::Duration;
 use crate::proxy::common::client_adapter::CLIENT_ADAPTERS; // [NEW] Adapter Registry
+use crate::proxy::session_manager::SessionManager;
 use axum::http::HeaderMap;
+use tokio::time::Duration;
 
 pub async fn handle_chat_completions(
     State(state): State<AppState>,
@@ -104,7 +105,10 @@ pub async fn handle_chat_completions(
     let trace_id = format!("req_{}", chrono::Utc::now().timestamp_subsec_millis());
     info!(
         "[{}] OpenAI Chat Request: {} | {} messages | stream: {}",
-        trace_id, openai_req.model, openai_req.messages.len(), openai_req.stream
+        trace_id,
+        openai_req.model,
+        openai_req.messages.len(),
+        openai_req.stream
     );
     let debug_cfg = state.debug_logging.read().await.clone();
     if debug_logger::is_enabled(&debug_cfg) {
@@ -116,11 +120,20 @@ pub async fn handle_chat_completions(
             "original_model": openai_req.model,
             "request": original_body,  // 使用原始请求体，不是结构体序列化
         });
-        debug_logger::write_debug_payload(&debug_cfg, Some(&trace_id), "original_request", &original_payload).await;
+        debug_logger::write_debug_payload(
+            &debug_cfg,
+            Some(&trace_id),
+            "original_request",
+            &original_payload,
+        )
+        .await;
     }
 
     // [NEW] Detect Client Adapter
-    let client_adapter = CLIENT_ADAPTERS.iter().find(|a| a.matches(&headers)).cloned();
+    let client_adapter = CLIENT_ADAPTERS
+        .iter()
+        .find(|a| a.matches(&headers))
+        .cloned();
     if client_adapter.is_some() {
         debug!("[{}] Client Adapter detected", trace_id);
     }
@@ -187,7 +200,8 @@ pub async fn handle_chat_completions(
         info!("✓ Using account: {} (type: {})", email, config.request_type);
 
         // 4. 转换请求 (返回内容包含 session_id 和 message_count)
-        let (gemini_body, session_id, message_count) = transform_openai_request(&openai_req, &project_id, &mapped_model);
+        let (gemini_body, session_id, message_count) =
+            transform_openai_request(&openai_req, &project_id, &mapped_model);
 
         if debug_logger::is_enabled(&debug_cfg) {
             let payload = json!({
@@ -200,7 +214,13 @@ pub async fn handle_chat_completions(
                 "attempt": attempt,
                 "v1internal_request": gemini_body.clone(),
             });
-            debug_logger::write_debug_payload(&debug_cfg, Some(&trace_id), "v1internal_request", &payload).await;
+            debug_logger::write_debug_payload(
+                &debug_cfg,
+                Some(&trace_id),
+                "v1internal_request",
+                &payload,
+            )
+            .await;
         }
 
         // [New] 打印转换后的报文 (Gemini Body) 供调试
@@ -230,12 +250,25 @@ pub async fn handle_chat_completions(
         // [FIX #1522] Inject Anthropic Beta Headers for Claude models (OpenAI path)
         let mut extra_headers = std::collections::HashMap::new();
         if mapped_model.to_lowercase().contains("claude") {
-            extra_headers.insert("anthropic-beta".to_string(), "claude-code-20250219".to_string());
-            tracing::debug!("[{}] Injected Anthropic beta headers for Claude model (via OpenAI)", trace_id);
+            extra_headers.insert(
+                "anthropic-beta".to_string(),
+                "claude-code-20250219".to_string(),
+            );
+            tracing::debug!(
+                "[{}] Injected Anthropic beta headers for Claude model (via OpenAI)",
+                trace_id
+            );
         }
 
-        let response = match upstream
-            .call_v1_internal_with_headers(method, &access_token, gemini_body, query_string, extra_headers.clone(), Some(account_id.as_str()))
+        let call_result = match upstream
+            .call_v1_internal_with_headers(
+                method,
+                &access_token,
+                gemini_body,
+                query_string,
+                extra_headers.clone(),
+                Some(account_id.as_str()),
+            )
             .await
         {
             Ok(r) => r,
@@ -251,6 +284,41 @@ pub async fn handle_chat_completions(
             }
         };
 
+        // [NEW] 记录端点降级日志到 debug 文件
+        if !call_result.fallback_attempts.is_empty() && debug_logger::is_enabled(&debug_cfg) {
+            let fallback_entries: Vec<Value> = call_result
+                .fallback_attempts
+                .iter()
+                .map(|a| {
+                    json!({
+                        "endpoint_url": a.endpoint_url,
+                        "status": a.status,
+                        "error": a.error,
+                    })
+                })
+                .collect();
+            let payload = json!({
+                "kind": "endpoint_fallback",
+                "protocol": "openai",
+                "trace_id": trace_id,
+                "original_model": openai_req.model,
+                "mapped_model": mapped_model,
+                "attempt": attempt,
+                "account": mask_email(&email),
+                "fallback_attempts": fallback_entries,
+            });
+            debug_logger::write_debug_payload(
+                &debug_cfg,
+                Some(&trace_id),
+                "endpoint_fallback",
+                &payload,
+            )
+            .await;
+        }
+
+        let response = call_result.response;
+        // [NEW] 提取实际请求的上游端点 URL，用于日志记录和排查
+        let upstream_url = response.url().to_string();
         let status = response.status();
         if status.is_success() {
             // 5. 处理流式 vs 非流式
@@ -267,6 +335,7 @@ pub async fn handle_chat_completions(
                     "request_type": config.request_type,
                     "attempt": attempt,
                     "status": status.as_u16(),
+                    "upstream_url": upstream_url,
                 });
                 let gemini_stream = debug_logger::wrap_reqwest_stream_with_debug(
                     Box::pin(response.bytes_stream()),
@@ -279,8 +348,12 @@ pub async fn handle_chat_completions(
                 // [P1 FIX] Enhanced Peek logic to handle heartbeats and slow start
                 // Pre-read until we find meaningful content, skip heartbeats
                 use crate::proxy::mappers::openai::streaming::create_openai_sse_stream;
-                let mut openai_stream =
-                    create_openai_sse_stream(gemini_stream, openai_req.model.clone(), session_id, message_count);
+                let mut openai_stream = create_openai_sse_stream(
+                    gemini_stream,
+                    openai_req.model.clone(),
+                    session_id,
+                    message_count,
+                );
 
                 let mut first_data_chunk = None;
                 let mut retry_this_account = false;
@@ -401,7 +474,8 @@ pub async fn handle_chat_completions(
                 .await
                 .map_err(|e| (StatusCode::BAD_GATEWAY, format!("Parse error: {}", e)))?;
 
-            let openai_response = transform_openai_response(&gemini_resp, Some(&session_id), message_count);
+            let openai_response =
+                transform_openai_response(&gemini_resp, Some(&session_id), message_count);
             return Ok((
                 StatusCode::OK,
                 [
@@ -442,9 +516,17 @@ pub async fn handle_chat_completions(
                 "request_type": config.request_type,
                 "attempt": attempt,
                 "status": status_code,
+                "upstream_url": upstream_url,
+                "account": mask_email(&email),
                 "error_text": error_text,
             });
-            debug_logger::write_debug_payload(&debug_cfg, Some(&trace_id), "upstream_response_error", &payload).await;
+            debug_logger::write_debug_payload(
+                &debug_cfg,
+                Some(&trace_id),
+                "upstream_response_error",
+                &payload,
+            )
+            .await;
         }
 
         // 确定重试策略
@@ -471,9 +553,12 @@ pub async fn handle_chat_completions(
                 if adapter.let_it_crash() && attempt > 0 {
                     // For let_it_crash clients (like opencode), allow maybe 1 retry but then fail fast
                     // to prevent long hangs on UI.
-                    tracing::warn!("[OpenAI] let_it_crash active: Aborting retries after attempt {}", attempt);
+                    tracing::warn!(
+                        "[OpenAI] let_it_crash active: Aborting retries after attempt {}",
+                        attempt
+                    );
                     // Breaking loop to return error immediately
-                    // Reuse existing error return logic via loop exit behavior? 
+                    // Reuse existing error return logic via loop exit behavior?
                     // Or construct error here?
                     // Let's just break for now, which will trigger the "All accounts exhausted" or last error logic.
                     break;
@@ -571,9 +656,9 @@ pub async fn handle_chat_completions(
             if status_code == 403 {
                 if let Some(acc_id) = token_manager.get_account_id_by_email(&email) {
                     // Check for VALIDATION_REQUIRED error - temporarily block account
-                    if error_text.contains("VALIDATION_REQUIRED") ||
-                       error_text.contains("verify your account") ||
-                       error_text.contains("validation_url")
+                    if error_text.contains("VALIDATION_REQUIRED")
+                        || error_text.contains("verify your account")
+                        || error_text.contains("validation_url")
                     {
                         tracing::warn!(
                             "[OpenAI] VALIDATION_REQUIRED detected on account {}, temporarily blocking",
@@ -583,7 +668,10 @@ pub async fn handle_chat_completions(
                         let block_minutes = 10i64;
                         let block_until = chrono::Utc::now().timestamp() + (block_minutes * 60);
 
-                        if let Err(e) = token_manager.set_validation_block_public(&acc_id, block_until, &error_text).await {
+                        if let Err(e) = token_manager
+                            .set_validation_block_public(&acc_id, block_until, &error_text)
+                            .await
+                        {
                             tracing::error!("Failed to set validation block: {}", e);
                         }
                     }
@@ -1091,12 +1179,14 @@ pub async fn handle_completions(
 
         info!("✓ Using account: {} (type: {})", email, config.request_type);
 
-        let (gemini_body, session_id, message_count) = transform_openai_request(&openai_req, &project_id, &mapped_model);
+        let (gemini_body, session_id, message_count) =
+            transform_openai_request(&openai_req, &project_id, &mapped_model);
 
         // [New] 打印转换后的报文 (Gemini Body) 供调试 (Codex 路径) ———— 缩减为 simple debug
         debug!(
             "[Codex-Request] Transformed Gemini Body ({} parts)",
-            gemini_body.get("contents")
+            gemini_body
+                .get("contents")
                 .and_then(|c| c.as_array())
                 .map(|a| a.len())
                 .unwrap_or(0)
@@ -1113,8 +1203,14 @@ pub async fn handle_completions(
         };
         let query_string = if list_response { Some("alt=sse") } else { None };
 
-        let response = match upstream
-            .call_v1_internal(method, &access_token, gemini_body, query_string, Some(account_id.as_str()))
+        let call_result = match upstream
+            .call_v1_internal(
+                method,
+                &access_token,
+                gemini_body,
+                query_string,
+                Some(account_id.as_str()),
+            )
             .await
         {
             Ok(r) => r,
@@ -1130,6 +1226,7 @@ pub async fn handle_completions(
             }
         };
 
+        let response = call_result.response;
         let status = response.status();
         if status.is_success() {
             // [智能限流] 请求成功，重置该账号的连续失败计数
@@ -1150,10 +1247,20 @@ pub async fn handle_completions(
                 if client_wants_stream {
                     let mut openai_stream = if is_codex_style {
                         use crate::proxy::mappers::openai::streaming::create_codex_sse_stream;
-                        create_codex_sse_stream(Box::pin(gemini_stream), openai_req.model.clone(), session_id, message_count)
+                        create_codex_sse_stream(
+                            Box::pin(gemini_stream),
+                            openai_req.model.clone(),
+                            session_id,
+                            message_count,
+                        )
                     } else {
                         use crate::proxy::mappers::openai::streaming::create_legacy_sse_stream;
-                        create_legacy_sse_stream(Box::pin(gemini_stream), openai_req.model.clone(), session_id, message_count)
+                        create_legacy_sse_stream(
+                            Box::pin(gemini_stream),
+                            openai_req.model.clone(),
+                            session_id,
+                            message_count,
+                        )
                     };
 
                     // [P1 FIX] Enhanced Peek logic (Reused from above/standard)
@@ -1227,8 +1334,12 @@ pub async fn handle_completions(
                     use crate::proxy::mappers::openai::streaming::create_openai_sse_stream;
                     // Note: We use create_openai_sse_stream regardless of is_codex_style here,
                     // because we just want the content aggregation which chat stream does well.
-                    let mut openai_stream =
-                        create_openai_sse_stream(Box::pin(gemini_stream), openai_req.model.clone(), session_id, message_count);
+                    let mut openai_stream = create_openai_sse_stream(
+                        Box::pin(gemini_stream),
+                        openai_req.model.clone(),
+                        session_id,
+                        message_count,
+                    );
 
                     // Peek Logic (Repeated for safety/correctness on this stream type)
                     let mut first_data_chunk = None;
@@ -1542,7 +1653,9 @@ pub async fn handle_images_generations(
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager.clone();
     let max_pool_size = token_manager.len();
-    let max_attempts = MAX_RETRY_ATTEMPTS.min(max_pool_size.saturating_add(1)).max(2);
+    let max_attempts = MAX_RETRY_ATTEMPTS
+        .min(max_pool_size.saturating_add(1))
+        .max(2);
 
     let mut tasks = Vec::new();
 
@@ -1559,19 +1672,19 @@ pub async fn handle_images_generations(
             let mut last_error = String::new();
 
             for attempt in 0..max_attempts {
-                 // 4.1 获取 Token
+                // 4.1 获取 Token
                 let (access_token, project_id, email, account_id, _wait_ms) = match token_manager
                     .get_token("image_gen", attempt > 0, None, "dall-e-3")
                     .await
                 {
                     Ok(t) => t,
                     Err(e) => {
-                         last_error = format!("Token error: {}", e);
-                         if attempt < max_attempts - 1 {
-                             tokio::time::sleep(Duration::from_millis(500)).await;
-                             continue;
-                         }
-                         break;
+                        last_error = format!("Token error: {}", e);
+                        if attempt < max_attempts - 1 {
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            continue;
+                        }
+                        break;
                     }
                 };
 
@@ -1601,19 +1714,30 @@ pub async fn handle_images_generations(
                 });
 
                 match upstream
-                    .call_v1_internal("generateContent", &access_token, gemini_body, None, Some(account_id.as_str()))
+                    .call_v1_internal(
+                        "generateContent",
+                        &access_token,
+                        gemini_body,
+                        None,
+                        Some(account_id.as_str()),
+                    )
                     .await
                 {
-                    Ok(response) => {
-                         let status = response.status();
-                         if !status.is_success() {
+                    Ok(call_result) => {
+                        let response = call_result.response;
+                        let status = response.status();
+                        if !status.is_success() {
                             let err_text = response.text().await.unwrap_or_default();
                             let status_code = status.as_u16();
                             last_error = format!("Upstream error {}: {}", status, err_text);
 
                             // 429/500/503 等错误进行标记和重试
                             if status_code == 429 || status_code == 503 || status_code == 500 {
-                                tracing::warn!("[Images] Account {} rate limited/error ({}), rotating...", email, status_code);
+                                tracing::warn!(
+                                    "[Images] Account {} rate limited/error ({}), rotating...",
+                                    email,
+                                    status_code
+                                );
                                 token_manager
                                     .mark_rate_limited_async(
                                         &email,
@@ -1719,7 +1843,7 @@ pub async fn handle_images_generations(
         } else {
             StatusCode::BAD_GATEWAY
         };
-        
+
         return Err((status, error_msg));
     }
 
@@ -1881,7 +2005,6 @@ pub async fn handle_images_edits(
         quality_input,
     );
 
-
     // 3. Construct Contents
     let mut contents_parts = Vec::new();
 
@@ -1929,7 +2052,9 @@ pub async fn handle_images_edits(
     let upstream = state.upstream.clone();
     let token_manager = state.token_manager.clone();
     let max_pool_size = token_manager.len();
-    let max_attempts = MAX_RETRY_ATTEMPTS.min(max_pool_size.saturating_add(1)).max(2);
+    let max_attempts = MAX_RETRY_ATTEMPTS
+        .min(max_pool_size.saturating_add(1))
+        .max(2);
 
     let mut tasks = Vec::new();
     for _ in 0..n {
@@ -1951,12 +2076,12 @@ pub async fn handle_images_edits(
                 {
                     Ok(t) => t,
                     Err(e) => {
-                         last_error = format!("Token error: {}", e);
-                         if attempt < max_attempts - 1 {
-                             tokio::time::sleep(Duration::from_millis(500)).await;
-                             continue;
-                         }
-                         break;
+                        last_error = format!("Token error: {}", e);
+                        if attempt < max_attempts - 1 {
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            continue;
+                        }
+                        break;
                     }
                 };
 
@@ -1992,19 +2117,30 @@ pub async fn handle_images_edits(
                 });
 
                 match upstream
-                    .call_v1_internal("generateContent", &access_token, gemini_body, None, Some(account_id.as_str()))
+                    .call_v1_internal(
+                        "generateContent",
+                        &access_token,
+                        gemini_body,
+                        None,
+                        Some(account_id.as_str()),
+                    )
                     .await
                 {
-                    Ok(response) => {
+                    Ok(call_result) => {
+                        let response = call_result.response;
                         let status = response.status();
                         if !status.is_success() {
                             let err_text = response.text().await.unwrap_or_default();
                             let status_code = status.as_u16();
                             last_error = format!("Upstream error {}: {}", status, err_text);
 
-                             // 429/500/503 等错误进行标记和重试
+                            // 429/500/503 等错误进行标记和重试
                             if status_code == 429 || status_code == 503 || status_code == 500 {
-                                tracing::warn!("[Images] Account {} rate limited/error ({}), rotating...", email, status_code);
+                                tracing::warn!(
+                                    "[Images] Account {} rate limited/error ({}), rotating...",
+                                    email,
+                                    status_code
+                                );
                                 token_manager
                                     .mark_rate_limited_async(
                                         &email,
@@ -2024,12 +2160,12 @@ pub async fn handle_images_edits(
                         }
                     }
                     Err(e) => {
-                         last_error = format!("Network error: {}", e);
-                         continue;
+                        last_error = format!("Network error: {}", e);
+                        continue;
                     }
                 }
             }
-             Err(format!("Max retries exhausted. Last error: {}", last_error))
+            Err(format!("Max retries exhausted. Last error: {}", last_error))
         }));
     }
 

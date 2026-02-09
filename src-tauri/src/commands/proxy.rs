@@ -1,12 +1,11 @@
-use tauri::State;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::sync::atomic::{AtomicBool, Ordering};
-use serde::{Serialize, Deserialize};
-use crate::proxy::{ProxyConfig, ProxyPoolConfig, TokenManager};
-use tokio::time::Duration;
 use crate::proxy::monitor::{ProxyMonitor, ProxyRequestLog, ProxyStats};
-
+use crate::proxy::{ProxyConfig, ProxyPoolConfig, TokenManager};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::RwLock;
+use tokio::time::Duration;
 
 /// 反代服务状态
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,7 +62,8 @@ pub async fn start_proxy_service(
         &state,
         crate::modules::integration::SystemManager::Desktop(app_handle),
         Arc::new(cf_state.inner().clone()),
-    ).await
+    )
+    .await
 }
 
 struct StartingGuard(Arc<AtomicBool>);
@@ -89,7 +89,11 @@ pub async fn internal_start_proxy_service(
     }
 
     // 2. 检查是否正在启动中 (防止死锁 & 并发启动)
-    if state.starting.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+    if state
+        .starting
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
         return Err("服务正在启动中，请稍候...".to_string());
     }
 
@@ -100,11 +104,12 @@ pub async fn internal_start_proxy_service(
     {
         let mut monitor_lock = state.monitor.write().await;
         if monitor_lock.is_none() {
-            let app_handle = if let crate::modules::integration::SystemManager::Desktop(ref h) = integration {
-                Some(h.clone())
-            } else {
-                None
-            };
+            let app_handle =
+                if let crate::modules::integration::SystemManager::Desktop(ref h) = integration {
+                    Some(h.clone())
+                } else {
+                    None
+                };
             *monitor_lock = Some(Arc::new(ProxyMonitor::new(1000, app_handle)));
         }
         // Sync enabled state from config
@@ -116,31 +121,48 @@ pub async fn internal_start_proxy_service(
     let _monitor = state.monitor.read().await.as_ref().unwrap().clone();
 
     // 檢查並啟動管理服務器（如果尚未運行）
-    ensure_admin_server(config.clone(), state, integration.clone(), cloudflared_state.clone()).await?;
+    ensure_admin_server(
+        config.clone(),
+        state,
+        integration.clone(),
+        cloudflared_state.clone(),
+    )
+    .await?;
 
     // 2. [FIX] 复用管理服务器的 Token 管理器 (单实例，解决热更新同步问题)
     let token_manager = {
         let admin_lock = state.admin_server.read().await;
-        admin_lock.as_ref().unwrap().axum_server.token_manager.clone()
+        admin_lock
+            .as_ref()
+            .unwrap()
+            .axum_server
+            .token_manager
+            .clone()
     };
 
     // 同步配置到运行中的 TokenManager
     token_manager.start_auto_cleanup().await;
-    token_manager.update_sticky_config(config.scheduling.clone()).await;
+    token_manager
+        .update_sticky_config(config.scheduling.clone())
+        .await;
 
     // [NEW] 加载熔断配置 (从主配置加载)
-    let app_config = crate::modules::config::load_app_config().unwrap_or_else(|_| crate::models::AppConfig::new());
-    token_manager.update_circuit_breaker_config(app_config.circuit_breaker).await;
+    let app_config = crate::modules::config::load_app_config()
+        .unwrap_or_else(|_| crate::models::AppConfig::new());
+    token_manager
+        .update_circuit_breaker_config(app_config.circuit_breaker)
+        .await;
 
     // 🆕 [FIX #820] 恢复固定账号模式设置
     if let Some(ref account_id) = config.preferred_account_id {
-        token_manager.set_preferred_account(Some(account_id.clone())).await;
+        token_manager
+            .set_preferred_account(Some(account_id.clone()))
+            .await;
         tracing::info!("🔒 [FIX #820] Fixed account mode restored: {}", account_id);
     }
 
     // 3. 加載賬號
-    let active_accounts = token_manager.load_accounts().await
-        .unwrap_or(0);
+    let active_accounts = token_manager.load_accounts().await.unwrap_or(0);
 
     if active_accounts == 0 {
         let zai_enabled = config.zai.enabled
@@ -199,11 +221,12 @@ pub async fn ensure_admin_server(
     let monitor = {
         let mut monitor_lock = state.monitor.write().await;
         if monitor_lock.is_none() {
-            let app_handle = if let crate::modules::integration::SystemManager::Desktop(ref h) = integration {
-                Some(h.clone())
-            } else {
-                None
-            };
+            let app_handle =
+                if let crate::modules::integration::SystemManager::Desktop(ref h) = integration {
+                    Some(h.clone())
+                } else {
+                    None
+                };
             *monitor_lock = Some(Arc::new(ProxyMonitor::new(1000, app_handle)));
         }
         monitor_lock.as_ref().unwrap().clone()
@@ -215,27 +238,28 @@ pub async fn ensure_admin_server(
     // [NEW] 加载账号数据，否则管理界面统计为 0
     let _ = token_manager.load_accounts().await;
 
-    let (axum_server, server_handle) =
-        match crate::proxy::AxumServer::start(
-            config.get_bind_address().to_string(),
-            config.port,
-            token_manager,
-            config.custom_mapping.clone(),
-            config.request_timeout,
-            config.upstream_proxy.clone(),
-            config.user_agent_override.clone(),
-            crate::proxy::ProxySecurityConfig::from_proxy_config(&config),
-            config.zai.clone(),
-            monitor,
-            config.experimental.clone(),
-            config.debug_logging.clone(),
-            integration.clone(),
-            cloudflared_state,
-            config.proxy_pool.clone(),
-        ).await {
-            Ok((server, handle)) => (server, handle),
-            Err(e) => return Err(format!("启动管理服务器失败: {}", e)),
-        };
+    let (axum_server, server_handle) = match crate::proxy::AxumServer::start(
+        config.get_bind_address().to_string(),
+        config.port,
+        token_manager,
+        config.custom_mapping.clone(),
+        config.request_timeout,
+        config.upstream_proxy.clone(),
+        config.user_agent_override.clone(),
+        crate::proxy::ProxySecurityConfig::from_proxy_config(&config),
+        config.zai.clone(),
+        monitor,
+        config.experimental.clone(),
+        config.debug_logging.clone(),
+        integration.clone(),
+        cloudflared_state,
+        config.proxy_pool.clone(),
+    )
+    .await
+    {
+        Ok((server, handle)) => (server, handle),
+        Err(e) => return Err(format!("启动管理服务器失败: {}", e)),
+    };
 
     *admin_lock = Some(AdminServerInstance {
         axum_server,
@@ -244,15 +268,17 @@ pub async fn ensure_admin_server(
 
     // [NEW] 初始化全局 Thinking Budget 配置
     crate::proxy::update_thinking_budget_config(config.thinking_budget.clone());
+    // [NEW] 初始化全局系统提示词配置
+    crate::proxy::update_global_system_prompt_config(config.global_system_prompt.clone());
+    // [NEW] 初始化全局图像思维模式配置
+    crate::proxy::update_image_thinking_mode(config.image_thinking_mode.clone());
 
     Ok(())
 }
 
 /// 停止反代服务
 #[tauri::command]
-pub async fn stop_proxy_service(
-    state: State<'_, ProxyServiceState>,
-) -> Result<(), String> {
+pub async fn stop_proxy_service(state: State<'_, ProxyServiceState>) -> Result<(), String> {
     let mut instance_lock = state.instance.write().await;
 
     if instance_lock.is_none() {
@@ -271,9 +297,7 @@ pub async fn stop_proxy_service(
 
 /// 获取反代服务状态
 #[tauri::command]
-pub async fn get_proxy_status(
-    state: State<'_, ProxyServiceState>,
-) -> Result<ProxyStatus, String> {
+pub async fn get_proxy_status(state: State<'_, ProxyServiceState>) -> Result<ProxyStatus, String> {
     // 优先检查启动标志，避免被写锁阻塞
     if state.starting.load(Ordering::SeqCst) {
         return Ok(ProxyStatus {
@@ -288,21 +312,19 @@ pub async fn get_proxy_status(
     let lock_res = state.instance.try_read();
 
     match lock_res {
-        Ok(instance_lock) => {
-            match instance_lock.as_ref() {
-                Some(instance) => Ok(ProxyStatus {
-                    running: true,
-                    port: instance.config.port,
-                    base_url: format!("http://127.0.0.1:{}", instance.config.port),
-                    active_accounts: instance.token_manager.len(),
-                }),
-                None => Ok(ProxyStatus {
-                    running: false,
-                    port: 0,
-                    base_url: String::new(),
-                    active_accounts: 0,
-                }),
-            }
+        Ok(instance_lock) => match instance_lock.as_ref() {
+            Some(instance) => Ok(ProxyStatus {
+                running: true,
+                port: instance.config.port,
+                base_url: format!("http://127.0.0.1:{}", instance.config.port),
+                active_accounts: instance.token_manager.len(),
+            }),
+            None => Ok(ProxyStatus {
+                running: false,
+                port: 0,
+                base_url: String::new(),
+                active_accounts: 0,
+            }),
         },
         Err(_) => {
             // 如果拿不到锁，说明正在进行写操作（可能是正在启动或停止中）
@@ -318,9 +340,7 @@ pub async fn get_proxy_status(
 
 /// 获取反代服务统计
 #[tauri::command]
-pub async fn get_proxy_stats(
-    state: State<'_, ProxyServiceState>,
-) -> Result<ProxyStats, String> {
+pub async fn get_proxy_stats(state: State<'_, ProxyServiceState>) -> Result<ProxyStats, String> {
     let monitor_lock = state.monitor.read().await;
     if let Some(monitor) = monitor_lock.as_ref() {
         Ok(monitor.get_stats().await)
@@ -358,9 +378,7 @@ pub async fn set_proxy_monitor_enabled(
 
 /// 清除反代请求日志
 #[tauri::command]
-pub async fn clear_proxy_logs(
-    state: State<'_, ProxyServiceState>,
-) -> Result<(), String> {
+pub async fn clear_proxy_logs(state: State<'_, ProxyServiceState>) -> Result<(), String> {
     let monitor_lock = state.monitor.read().await;
     if let Some(monitor) = monitor_lock.as_ref() {
         monitor.clear().await;
@@ -374,17 +392,12 @@ pub async fn get_proxy_logs_paginated(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<Vec<ProxyRequestLog>, String> {
-    crate::modules::proxy_db::get_logs_summary(
-        limit.unwrap_or(20),
-        offset.unwrap_or(0)
-    )
+    crate::modules::proxy_db::get_logs_summary(limit.unwrap_or(20), offset.unwrap_or(0))
 }
 
 /// 获取单条日志的完整详情
 #[tauri::command]
-pub async fn get_proxy_log_detail(
-    log_id: String,
-) -> Result<ProxyRequestLog, String> {
+pub async fn get_proxy_log_detail(log_id: String) -> Result<ProxyRequestLog, String> {
     crate::modules::proxy_db::get_log_detail(&log_id)
 }
 
@@ -396,38 +409,31 @@ pub async fn get_proxy_logs_count() -> Result<u64, String> {
 
 /// 导出所有日志到指定文件
 #[tauri::command]
-pub async fn export_proxy_logs(
-    file_path: String,
-) -> Result<usize, String> {
+pub async fn export_proxy_logs(file_path: String) -> Result<usize, String> {
     let logs = crate::modules::proxy_db::get_all_logs_for_export()?;
     let count = logs.len();
 
     let json = serde_json::to_string_pretty(&logs)
         .map_err(|e| format!("Failed to serialize logs: {}", e))?;
 
-    std::fs::write(&file_path, json)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&file_path, json).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(count)
 }
 
 /// 导出指定的日志JSON到文件
 #[tauri::command]
-pub async fn export_proxy_logs_json(
-    file_path: String,
-    json_data: String,
-) -> Result<usize, String> {
+pub async fn export_proxy_logs_json(file_path: String, json_data: String) -> Result<usize, String> {
     // Parse to count items
-    let logs: Vec<serde_json::Value> = serde_json::from_str(&json_data)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    let logs: Vec<serde_json::Value> =
+        serde_json::from_str(&json_data).map_err(|e| format!("Failed to parse JSON: {}", e))?;
     let count = logs.len();
 
     // Pretty print
-    let pretty_json = serde_json::to_string_pretty(&logs)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    let pretty_json =
+        serde_json::to_string_pretty(&logs).map_err(|e| format!("Failed to serialize: {}", e))?;
 
-    std::fs::write(&file_path, pretty_json)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&file_path, pretty_json).map_err(|e| format!("Failed to write file: {}", e))?;
 
     Ok(count)
 }
@@ -460,9 +466,7 @@ pub fn generate_api_key() -> String {
 
 /// 重新加载账号（当主应用添加/删除账号时调用）
 #[tauri::command]
-pub async fn reload_proxy_accounts(
-    state: State<'_, ProxyServiceState>,
-) -> Result<usize, String> {
+pub async fn reload_proxy_accounts(state: State<'_, ProxyServiceState>) -> Result<usize, String> {
     let instance_lock = state.instance.read().await;
 
     if let Some(instance) = instance_lock.as_ref() {
@@ -472,7 +476,10 @@ pub async fn reload_proxy_accounts(
         instance.token_manager.clear_all_sessions();
 
         // 重新加载账号
-        let count = instance.token_manager.load_accounts().await
+        let count = instance
+            .token_manager
+            .load_accounts()
+            .await
             .map_err(|e| format!("重新加载账号失败: {}", e))?;
         Ok(count)
     } else {
@@ -577,7 +584,8 @@ pub async fn fetch_zai_models(
 
     let url = join_base_url(&zai.base_url, "/v1/models");
 
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(request_timeout.max(5)));
+    let mut builder =
+        reqwest::Client::builder().timeout(Duration::from_secs(request_timeout.max(5)));
     if upstream_proxy.enabled && !upstream_proxy.url.is_empty() {
         let proxy = reqwest::Proxy::all(&upstream_proxy.url)
             .map_err(|e| format!("Invalid upstream proxy url: {}", e))?;
@@ -598,10 +606,17 @@ pub async fn fetch_zai_models(
         .map_err(|e| format!("Upstream request failed: {}", e))?;
 
     let status = resp.status();
-    let text = resp.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
 
     if !status.is_success() {
-        let preview = if text.len() > 4000 { &text[..4000] } else { &text };
+        let preview = if text.len() > 4000 {
+            &text[..4000]
+        } else {
+            &text
+        };
         return Err(format!("Upstream returned {}: {}", status, preview));
     }
 
@@ -671,7 +686,10 @@ pub async fn set_preferred_account(
         let cleaned_id = account_id.filter(|s| !s.trim().is_empty());
 
         // 1. 更新内存状态
-        instance.token_manager.set_preferred_account(cleaned_id.clone()).await;
+        instance
+            .token_manager
+            .set_preferred_account(cleaned_id.clone())
+            .await;
 
         // 2. 持久化到配置文件 (修复 Issue #820 自动关闭问题)
         let mut app_config = crate::modules::config::load_app_config()
@@ -681,7 +699,10 @@ pub async fn set_preferred_account(
             .map_err(|e| format!("保存配置失败: {}", e))?;
 
         if let Some(ref id) = cleaned_id {
-            tracing::info!("🔒 [FIX #820] Fixed account mode enabled and persisted: {}", id);
+            tracing::info!(
+                "🔒 [FIX #820] Fixed account mode enabled and persisted: {}",
+                id
+            );
         } else {
             tracing::info!("🔄 [FIX #820] Round-robin mode enabled and persisted");
         }
@@ -742,9 +763,9 @@ pub async fn check_proxy_health(
     if let Some(instance) = instance_lock.as_ref() {
         let pool_state = instance.axum_server.proxy_pool_state.clone();
         let manager = crate::proxy::proxy_pool::ProxyPoolManager::new(pool_state.clone());
-        
+
         manager.health_check().await?;
-        
+
         // Return the updated config from memory
         let config = pool_state.read().await;
         Ok(config.clone())

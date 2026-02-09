@@ -431,7 +431,7 @@ pub fn transform_claude_request_in(
         &tools_val,
         claude_req.size.as_deref(),    // [NEW] Pass size parameter
         claude_req.quality.as_deref(), // [NEW] Pass quality parameter
-        None,  // Claude uses size/quality params, not body.imageConfig
+        None,                          // Claude uses size/quality params, not body.imageConfig
     );
 
     // [CRITICAL FIX] Disable dummy thought injection for Vertex AI
@@ -534,8 +534,12 @@ pub fn transform_claude_request_in(
     }
 
     // 4. Generation Config & Thinking (Pass final is_thinking_enabled)
-    let generation_config =
-        build_generation_config(claude_req, &mapped_model, has_web_search_tool, is_thinking_enabled);
+    let generation_config = build_generation_config(
+        claude_req,
+        &mapped_model,
+        has_web_search_tool,
+        is_thinking_enabled,
+    );
 
     // 2. Contents (Messages)
     let contents = build_google_contents(
@@ -600,14 +604,28 @@ pub fn transform_claude_request_in(
             // 3. Clean generationConfig (remove responseMimeType, responseModalities etc.)
             let gen_config = obj.entry("generationConfig").or_insert_with(|| json!({}));
             if let Some(gen_obj) = gen_config.as_object_mut() {
-                // [REMOVED] thinkingConfig 拦截已删除，允许图像生成时输出思维链
-                // gen_obj.remove("thinkingConfig");
+                // [RESOLVE #1694] Check image thinking mode
+                let image_thinking_mode = crate::proxy::config::get_image_thinking_mode();
+                if image_thinking_mode == "disabled" {
+                    tracing::debug!(
+                        "[Claude-Request] Image thinking mode disabled: enforcing includeThoughts=false for {}",
+                        mapped_model
+                    );
+                    gen_obj.insert(
+                        "thinkingConfig".to_string(),
+                        json!({
+                            "includeThoughts": false
+                        }),
+                    );
+                }
+
                 gen_obj.remove("responseMimeType");
                 gen_obj.remove("responseModalities");
                 gen_obj.insert("imageConfig".to_string(), image_config);
             }
         }
     }
+
 
     // 生成 requestId
     let request_id = format!("agent-{}", uuid::Uuid::new_v4());
@@ -677,10 +695,14 @@ fn should_disable_thinking_due_to_history(messages: &[Message]) -> bool {
 fn should_enable_thinking_by_default(model: &str) -> bool {
     let model_lower = model.to_lowercase();
 
-    // Enable thinking by default for Opus 4.5 variants
-    if model_lower.contains("opus-4-5") || model_lower.contains("opus-4.5") {
+    // Enable thinking by default for Opus 4.5 and 4.6 variants
+    if model_lower.contains("opus-4-5")
+        || model_lower.contains("opus-4.5")
+        || model_lower.contains("opus-4-6")
+        || model_lower.contains("opus-4.6")
+    {
         tracing::debug!(
-            "[Thinking-Mode] Auto-enabling thinking for Opus 4.5 model: {}",
+            "[Thinking-Mode] Auto-enabling thinking for Opus model: {}",
             model
         );
         return true;
@@ -808,6 +830,12 @@ fn build_system_instruction(
     // 如果用户没有提供 Antigravity 身份,则注入
     if !user_has_antigravity {
         parts.push(json!({"text": antigravity_identity}));
+    }
+
+    // [NEW] 注入全局系统提示词 (紧跟 Antigravity 身份之后)
+    let global_prompt_config = crate::proxy::config::get_global_system_prompt();
+    if global_prompt_config.enabled && !global_prompt_config.content.trim().is_empty() {
+        parts.push(json!({"text": global_prompt_config.content}));
     }
 
     // 添加用户的系统提示词
@@ -1700,7 +1728,11 @@ fn build_generation_config(
     // Thinking 配置
     if is_thinking_enabled {
         let mut thinking_config = json!({"includeThoughts": true});
-        let budget_tokens = claude_req.thinking.as_ref().and_then(|t| t.budget_tokens).unwrap_or(16000);
+        let budget_tokens = claude_req
+            .thinking
+            .as_ref()
+            .and_then(|t| t.budget_tokens)
+            .unwrap_or(16000);
 
         let tb_config = crate::proxy::config::get_thinking_budget_config();
         let budget = match tb_config.mode {
@@ -1709,11 +1741,10 @@ fn build_generation_config(
                 let mut custom_value = tb_config.custom_value;
                 // [FIX #1602] 针对 Gemini 系列模型，在自定义模式下也强制执行 24576 上限
                 let model_lower = mapped_model.to_lowercase();
-                let is_gemini_limited = has_web_search
-                    || model_lower.contains("gemini")
+                let is_gemini_limited = (model_lower.contains("gemini") && !model_lower.contains("-image"))
                     || model_lower.contains("flash")
                     || model_lower.ends_with("-thinking");
-                
+
                 if is_gemini_limited && custom_value > 24576 {
                     tracing::warn!(
                         "[Claude-Request] Custom mode: capping thinking_budget from {} to 24576 for Gemini model {}",
@@ -1722,12 +1753,11 @@ fn build_generation_config(
                     custom_value = 24576;
                 }
                 custom_value
-            },
+            }
             crate::proxy::config::ThinkingBudgetMode::Auto => {
                 // [FIX #1592] Use mapped model for robust detection, same as OpenAI protocol
                 let model_lower = mapped_model.to_lowercase();
-                let is_gemini_limited = has_web_search
-                    || model_lower.contains("gemini")
+                let is_gemini_limited = (model_lower.contains("gemini") && !model_lower.contains("-image"))
                     || model_lower.contains("flash")
                     || model_lower.ends_with("-thinking");
                 if is_gemini_limited && budget_tokens > 24576 {
@@ -1791,7 +1821,9 @@ fn build_generation_config(
         {
             let current = final_max_tokens.unwrap_or(0);
             if current <= budget as i64 {
-                final_max_tokens = Some((budget + 8192) as i64);
+                // [FIX #1675] 针对图像模型使用更小的增量 (2048)
+                let overhead = if mapped_model.contains("-image") { 2048 } else { 8192 };
+                final_max_tokens = Some((budget + overhead) as i64);
                 tracing::info!(
                     "[Generation-Config] Bumping maxOutputTokens to {} due to thinking budget of {}", 
                     final_max_tokens.unwrap(), budget
@@ -2610,7 +2642,7 @@ mod tests {
     fn test_gemini_pro_thinking_support() {
         // Setup request for Gemini Pro (no -thinking suffix)
         let req = ClaudeRequest {
-            model: "gemini-3-pro-preview".to_string(), 
+            model: "gemini-3-pro-preview".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),
                 content: MessageContent::String("Hello".to_string()),
@@ -2637,9 +2669,14 @@ mod tests {
         let gen_config = &result["request"]["generationConfig"];
 
         // thinkingConfig should be present (not forced disabled)
-        assert!(gen_config.get("thinkingConfig").is_some(), "thinkingConfig should be preserved for gemini-3-pro");
-        
-        let budget = gen_config["thinkingConfig"]["thinkingBudget"].as_u64().unwrap();
+        assert!(
+            gen_config.get("thinkingConfig").is_some(),
+            "thinkingConfig should be preserved for gemini-3-pro"
+        );
+
+        let budget = gen_config["thinkingConfig"]["thinkingBudget"]
+            .as_u64()
+            .unwrap();
         // [FIX #1592] Since it's < 24576, it should be kept as 16000
         assert_eq!(budget, 16000);
     }
@@ -2648,7 +2685,7 @@ mod tests {
     fn test_gemini_pro_default_thinking() {
         // Setup request for Gemini Pro WITHOUT thinking config
         let req = ClaudeRequest {
-            model: "gemini-3-pro-preview".to_string(), 
+            model: "gemini-3-pro-preview".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),
                 content: MessageContent::String("Hello".to_string()),
@@ -2672,6 +2709,48 @@ mod tests {
         let gen_config = &result["request"]["generationConfig"];
 
         // thinkingConfig SHOULD be injected because of default-on logic
-        assert!(gen_config.get("thinkingConfig").is_some(), "thinkingConfig should be auto-enabled for gemini-3-pro");
+        assert!(
+            gen_config.get("thinkingConfig").is_some(),
+            "thinkingConfig should be auto-enabled for gemini-3-pro"
+        );
+    }
+
+    #[test]
+    fn test_claude_image_thinking_mode_disabled() {
+        // 1. Force image thinking mode to "disabled"
+        crate::proxy::config::update_image_thinking_mode(Some("disabled".to_string()));
+
+        // 2. Setup Claude request for an image model (mapped to gemini-3-pro-image)
+        let req = ClaudeRequest {
+            model: "gemini-3-pro-image".to_string(), // Explicitly use recognized image model
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: MessageContent::String("Draw a cat".to_string()),
+            }],
+            thinking: None,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stream: false,
+            system: None,
+            tools: None,
+            metadata: None,
+            output_config: None,
+            size: Some("1024x1024".to_string()),
+            quality: Some("hd".to_string()),
+        };
+
+        // 3. Transform request
+        let result = transform_claude_request_in(&req, "test-proj", false).unwrap();
+
+        // 4. Verify thinkingConfig has includeThoughts: false
+        let gen_config = result["request"]["generationConfig"].as_object().expect("Should have generationConfig");
+        let thinking_config = gen_config.get("thinkingConfig").and_then(|t| t.as_object()).expect("Should have thinkingConfig (explicitly disabled)");
+        
+        assert_eq!(thinking_config["includeThoughts"], false);
+        
+        // 5. Reset global mode
+        crate::proxy::config::update_image_thinking_mode(Some("enabled".to_string()));
     }
 }

@@ -123,6 +123,7 @@ pub fn check_cli_installed(app: &CliApp) -> (bool, Option<String>) {
         let mut common_paths = vec![
             home.join(".local/bin"),
             home.join(".npm-global/bin"),
+            home.join(".volta/bin"),
             home.join("bin"),
             PathBuf::from("/opt/homebrew/bin"),
             PathBuf::from("/usr/local/bin"),
@@ -278,7 +279,7 @@ pub fn get_sync_status(app: &CliApp, proxy_url: &str) -> (bool, bool, Option<Str
 }
 
 /// 执行同步逻辑
-pub fn sync_config(app: &CliApp, proxy_url: &str, api_key: &str) -> Result<(), String> {
+pub fn sync_config(app: &CliApp, proxy_url: &str, api_key: &str, model: Option<&str>) -> Result<(), String> {
     let files = app.config_files();
     
     for file in &files {
@@ -343,6 +344,11 @@ pub fn sync_config(app: &CliApp, proxy_url: &str, api_key: &str) -> Result<(), S
                             env_obj.remove("ANTHROPIC_API_KEY");
                         }
                     }
+
+                    if let Some(m) = model {
+                        // 注意：Claude Code 的官方配置中，当前选定模型放在根节点的 model 字段
+                        json.as_object_mut().unwrap().insert("model".to_string(), Value::String(m.to_string()));
+                    }
                     content = serde_json::to_string_pretty(&json).unwrap();
                 }
             }
@@ -368,9 +374,18 @@ pub fn sync_config(app: &CliApp, proxy_url: &str, api_key: &str) -> Result<(), S
                             c_table.insert("wire_api", value("responses"));
                             c_table.insert("requires_openai_auth", value(true));
                             c_table.insert("base_url", value(proxy_url));
+                            if let Some(m) = model {
+                                c_table.insert("model", value(m));
+                            }
                         }
                     }
                     doc.insert("model_provider", value("custom"));
+                    if let Some(m) = model {
+                        doc.insert("model", value(m));
+                    }
+                    // Codex 还需要清理可能存在的旧配置项
+                    doc.remove("openai_api_key");
+                    doc.remove("openai_base_url");
                     content = doc.to_string();
                 }
             }
@@ -390,6 +405,18 @@ pub fn sync_config(app: &CliApp, proxy_url: &str, api_key: &str) -> Result<(), S
                     }
                     if !found_url { lines.push(format!("GOOGLE_GEMINI_BASE_URL={}", proxy_url)); }
                     if !found_key { lines.push(format!("GEMINI_API_KEY={}", api_key)); }
+                    if let Some(m) = model {
+                        let mut found_model = false;
+                        for line in lines.iter_mut() {
+                            if line.starts_with("GOOGLE_GEMINI_MODEL=") {
+                                *line = format!("GOOGLE_GEMINI_MODEL={}", m);
+                                found_model = true;
+                            }
+                        }
+                        if !found_model {
+                            lines.push(format!("GOOGLE_GEMINI_MODEL={}", m));
+                        }
+                    }
                     content = lines.join("\n");
                 } else if file.name == "settings.json" || file.name == "config.json" {
                     let mut json: Value = serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!({}));
@@ -435,8 +462,8 @@ pub async fn get_cli_sync_status(app_type: CliApp, proxy_url: String) -> Result<
 }
 
 #[tauri::command]
-pub async fn execute_cli_sync(app_type: CliApp, proxy_url: String, api_key: String) -> Result<(), String> {
-    sync_config(&app_type, &proxy_url, &api_key)
+pub async fn execute_cli_sync(app_type: CliApp, proxy_url: String, api_key: String, model: Option<String>) -> Result<(), String> {
+    sync_config(&app_type, &proxy_url, &api_key, model.as_deref())
 }
 
 #[tauri::command]
@@ -464,7 +491,7 @@ pub async fn execute_cli_restore(app_type: CliApp) -> Result<(), String> {
     // 如果没有备份，则执行原来的逻辑：恢复为默认配置
     let default_url = app_type.default_url();
     // 恢复默认时清空 API Key，让用户重新授权或使用官方 Key
-    sync_config(&app_type, default_url, "")
+    sync_config(&app_type, default_url, "", None)
 }
 
 #[tauri::command]

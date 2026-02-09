@@ -116,6 +116,9 @@
         "ultra": "ULTRA",
         "pro": "PRO",
         "free": "GRÁTIS",
+        "edit_label": "Editar rótulo",
+        "custom_label_placeholder": "Digite um rótulo personalizado",
+        "label_updated": "Rótulo atualizado",
         "add_account": "Adicionar Conta",
         "refresh_all": "Atualizar Todas",
         "refresh_selected": "Atualizar ({{count}})",
@@ -469,18 +472,40 @@
             "support_wechat": "WeChat Pay",
             "support_buymeacoffee": "Buy Me a Coffee"
         },
+        "advanced_thinking": {
+            "title": "Pensamento Avançado e Configuração Global",
+            "description": "Gerencie capacidades de pensamento, modos de imagem e instruções globais centralmente."
+        },
         "thinking_budget": {
             "title": "Orçamento de Pensamento (Thinking Budget)",
-            "description": "Controla a profundidade de raciocínio do modelo de IA, afetando sua capacidade de resolver tarefas complexas",
-            "mode_auto": "Automático (Recomendado)",
-            "mode_auto_desc": "O sistema aplica o limite ideal para cada modelo",
-            "mode_passthrough": "Passagem direta",
-            "mode_passthrough_desc": "Confia totalmente no valor do chamador (gestão de riscos por sua conta)",
-            "mode_custom": "Personalizado",
-            "mode_custom_desc": "Usar um valor de orçamento personalizado fixo",
-            "custom_value_label": "Valor de orçamento personalizado",
-            "custom_value_hint": "Intervalo: 1024 - 65536 tokens",
-            "warning_passthrough": "⚠️ O modo de passagem direta pode consumir a cota rapidamente"
+            "description": "Controla o orçamento de tokens para o pensamento profundo da IA. Alguns modelos (ex: Flash, modelos com sufixo -thinking) são limitados a 24576 pela API upstream.",
+            "mode_label": "Modo de Processamento",
+            "mode": {
+                "auto": "Limite Automático",
+                "passthrough": "Passagem Direta",
+                "custom": "Personalizado"
+            },
+            "auto_hint": "Modo Automático: Limita automaticamente o orçamento em 24576 para modelos Flash, modelos com sufixo -thinking e solicitações de pesquisa na web para evitar erros de API.",
+            "passthrough_warning": "Passagem Direta: Usa diretamente o valor original do chamador. A falta de suporte para valores altos pode causar falhas.",
+            "custom_value_hint": "Recomendado: 24576 (Flash) ou 51200 (Estendido)",
+            "tokens": "tokens"
+        },
+        "image_thinking_mode": {
+            "title": "Modo de Pensamento de Iimagem (Image Thinking Mode)",
+            "hint": "Afeta a qualidade da imagem e o processo de geração",
+            "options": {
+                "enabled": "Ativado",
+                "disabled": "Desativado",
+                "enabled_desc": "Ligado: Mantém a cadeia de pensamento e retorna duas imagens (esboço + final).",
+                "disabled_desc": "Desligado: Desativa a cadeia de pensamento e gera uma imagem única de alta qualidade (prioridade qualidade)."
+            }
+        },
+        "global_system_prompt": {
+            "title": "Instruções do Sistema Globais (Global System Prompt)",
+            "hint": "Injetado automaticamente em systemInstruction para todas as solicitações",
+            "placeholder": "Insira as instruções globais do sistema...\nExemplo: Você é um desenvolvedor full-stack sênior especialista em React e Rust. Responda em português.",
+            "char_count": "{{count}} caracteres",
+            "long_prompt_warning": "As instruções são muito longas (mais de 2000 caracteres) e podem consumir muito espaço do contexto."
         }
     },
     "tray": {
@@ -621,13 +646,15 @@
             "enable_logging": "Habilitar Registro de Solicitações",
             "enable_logging_hint": "Registrar histórico para depuração (Custo de desempenho menor)",
             "upstream_proxy": {
-                "title": "Proxy Upstream Global (Proxy Global)",
-                "desc": "Quando habilitado, todas as solicitações externas (Proxy da API, Atualização de Token, Verificação de Cota, Verificação de Atualização) serão roteadas através deste proxy.",
-                "enable": "Habilitar Proxy Upstream",
-                "url": "URL do Proxy",
+                "title": "Proxy de upstream global (Global Proxy)",
+                "desc": "Quando habilitado, todas as solicitações externas (API Proxy, atualização de token, verificação de cota, verificação de atualização) serão roteadas por meio desse proxy.",
+                "desc_short": "Proxy global usado como solução de fallback quando nenhuma conta adequada é encontrada no pool de proxies.",
+                "enable": "Habilitar proxy de upstream",
+                "url": "URL do proxy",
                 "url_placeholder": "ex: http://127.0.0.1:7890 ou socks5://127.0.0.1:7890",
                 "tip": "Suporta HTTP, HTTPS e SOCKS5.",
-                "validation_error": "URL do proxy é obrigatório quando o proxy upstream está habilitado",
+                "socks5h_hint": "Para evitar bloqueos e manter a resolução DNS remota (Remote DNS), altere manualmente o protocolo para socks5h://",
+                "validation_error": "A URL do proxy é necessária quando o proxy de upstream está habilitado",
                 "restart_hint": "Configurações de proxy salvas. Reinicie o aplicativo para aplicar as alterações."
             },
             "scheduling": {

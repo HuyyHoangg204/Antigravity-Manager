@@ -16,6 +16,12 @@ static CLAUDE_TO_GEMINI: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|
     m.insert("claude-3-5-sonnet-20240620", "claude-sonnet-4-5");
     m.insert("claude-opus-4", "claude-opus-4-5-thinking");
     m.insert("claude-opus-4-5-20251101", "claude-opus-4-5-thinking");
+
+    // Claude Opus 4.6 (nuevo modelo thinking)
+    m.insert("claude-opus-4-6-thinking", "claude-opus-4-6-thinking");
+    m.insert("claude-opus-4-6", "claude-opus-4-6-thinking");
+    m.insert("claude-opus-4-6-20260201", "claude-opus-4-6-thinking");
+
     m.insert("claude-haiku-4", "claude-sonnet-4-5");
     m.insert("claude-3-haiku-20240307", "claude-sonnet-4-5");
     m.insert("claude-haiku-4-5-20251001", "claude-sonnet-4-5");
@@ -266,16 +272,27 @@ pub fn resolve_model_route(
 pub fn normalize_to_standard_id(model_name: &str) -> Option<String> {
     // [FIX] Strict matching based on user-defined groups (Case Insensitive)
     let lower = model_name.to_lowercase();
+    
+    // Group 1: Gemini 3 Flash
+    if lower.contains("gemini") && (lower.contains("flash") || lower.contains("lite")) {
+        return Some("gemini-3-flash".to_string());
+    }
+
+    // Group 2: Gemini 3 Pro High
+    if lower.contains("gemini") && lower.contains("pro") {
+        return Some("gemini-3-pro-high".to_string());
+    }
+
+    // Group 3: Claude 4.5 Sonnet (includes Opus etc. assigned to this bucket)
+    if lower.contains("claude") || lower.contains("sonnet") || lower.contains("opus") {
+        return Some("claude-sonnet-4-5".to_string());
+    }
+
+    // [Fallback] Explicit matching (Backward Compatibility)
     match lower.as_str() {
-        // Gemini 3 Flash Group
         "gemini-3-flash" => Some("gemini-3-flash".to_string()),
-
-        // Gemini 3 Pro High Group
-        "gemini-3-pro-high" | "gemini-3-pro-low" => Some("gemini-3-pro-high".to_string()),
-
-        // Claude 4.5 Sonnet Group
-        "claude-sonnet-4-5" | "claude-sonnet-4-5-thinking" | "claude-opus-4-5-thinking" => Some("claude-sonnet-4-5".to_string()),
-
+        "gemini-3-pro-high" | "gemini-3-pro-low" | "gemini-3-pro-preview" | "gemini-3-pro-image" => Some("gemini-3-pro-high".to_string()),
+        "claude-sonnet-4-5" | "claude-sonnet-4-5-thinking" | "claude-opus-4-5-thinking" | "claude-opus-4-6-thinking" => Some("claude-sonnet-4-5".to_string()),
         _ => None
     }
 }
@@ -301,7 +318,7 @@ mod tests {
         );
         assert_eq!(
             map_claude_model_to_gemini("unknown-model"),
-            "claude-sonnet-4-5"
+            "unknown-model"
         );
     }
 
@@ -345,7 +362,7 @@ mod tests {
         // Negative case: *thinking* should NOT match models without "thinking"
         assert_eq!(
             resolve_model_route("random-model-name", &custom),
-            "claude-sonnet-4-5"  // Falls back to system default
+            "random-model-name"  // Falls back to system default (pass-through)
         );
     }
 

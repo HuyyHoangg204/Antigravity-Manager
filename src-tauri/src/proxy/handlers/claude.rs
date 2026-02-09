@@ -22,6 +22,7 @@ use crate::proxy::server::AppState;
 use crate::proxy::mappers::context_manager::ContextManager;
 use crate::proxy::mappers::estimation_calibrator::get_calibrator;
 use crate::proxy::debug_logger;
+use crate::proxy::upstream::client::mask_email;
 use crate::proxy::common::client_adapter::CLIENT_ADAPTERS; // [NEW] Import Adapter Registry
 use axum::http::HeaderMap;
 use std::sync::{atomic::Ordering, Arc};
@@ -730,7 +731,7 @@ pub async fn handle_messages(
 
         // Upstream call configuration continued...
 
-        let response = match upstream
+        let call_result = match upstream
             .call_v1_internal_with_headers(method, &access_token, gemini_body, query, extra_headers.clone(), Some(account_id.as_str()))
             .await {
             Ok(r) => r,
@@ -740,7 +741,32 @@ pub async fn handle_messages(
                 continue;
             }
         };
-        
+
+        // [NEW] 记录端点降级日志到 debug 文件
+        if !call_result.fallback_attempts.is_empty() && debug_logger::is_enabled(&debug_cfg) {
+            let fallback_entries: Vec<Value> = call_result.fallback_attempts.iter().map(|a| {
+                json!({
+                    "endpoint_url": a.endpoint_url,
+                    "status": a.status,
+                    "error": a.error,
+                })
+            }).collect();
+            let payload = json!({
+                "kind": "endpoint_fallback",
+                "protocol": "anthropic",
+                "trace_id": trace_id,
+                "original_model": request.model,
+                "mapped_model": request_with_mapped.model,
+                "attempt": attempt,
+                "account": mask_email(&email),
+                "fallback_attempts": fallback_entries,
+            });
+            debug_logger::write_debug_payload(&debug_cfg, Some(&trace_id), "endpoint_fallback", &payload).await;
+        }
+
+        let response = call_result.response;
+        // [NEW] 提取实际请求的上游端点 URL，用于日志记录和排查
+        let upstream_url = response.url().to_string();
         let status = response.status();
         last_status = status;
         
@@ -762,6 +788,7 @@ pub async fn handle_messages(
                     "request_type": config.request_type,
                     "attempt": attempt,
                     "status": status.as_u16(),
+                    "upstream_url": upstream_url,
                 });
                 let gemini_stream = debug_logger::wrap_reqwest_stream_with_debug(
                     Box::pin(response.bytes_stream()),
@@ -974,6 +1001,8 @@ pub async fn handle_messages(
                 "request_type": config.request_type,
                 "attempt": attempt,
                 "status": status_code,
+                "upstream_url": upstream_url,
+                "account": mask_email(&email),
                 "error_text": error_text,
             });
             debug_logger::write_debug_payload(&debug_cfg, Some(&trace_id), "upstream_response_error", &payload).await;
@@ -1072,6 +1101,8 @@ pub async fn handle_messages(
                 m = m.replace("-thinking", "");
                 if m.contains("claude-sonnet-4-5-") {
                     m = "claude-sonnet-4-5".to_string();
+                } else if m.contains("claude-opus-4-6-") {
+                    m = "claude-opus-4-6".to_string();
                 } else if m.contains("claude-opus-4-5-") || m.contains("claude-opus-4-") {
                     m = "claude-opus-4-5".to_string();
                 }

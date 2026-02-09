@@ -242,7 +242,7 @@ function AccountCard({ account, selected, onSelect, isCurrent: propIsCurrent, is
                                 onChange={(e) => setLabelInput(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 autoFocus
-                                maxLength={20}
+                                maxLength={15}
                             />
                             <button
                                 className="p-1.5 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-all"

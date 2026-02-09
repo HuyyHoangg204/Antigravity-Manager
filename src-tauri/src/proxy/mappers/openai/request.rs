@@ -329,11 +329,11 @@ pub fn transform_openai_request(
                     // [New] 递归清理参数中可能存在的非法校验字段
                     crate::proxy::common::json_schema::clean_json_schema(&mut func_call_part);
 
-                    // [修复] 为该消息内的所有工具调用注入 thoughtSignature (Session 级)
                     if let Some(ref sig) = thought_sig {
                         func_call_part["thoughtSignature"] = json!(sig);
-                    } else if is_thinking_model && !mapped_model.starts_with("projects/") {
+                    } else if is_thinking_model {
                         // [NEW] Handle missing signature for Gemini thinking models
+                        // [FIX #1650] Allow sentinel injection for Vertex AI (projects/...) as well
                         tracing::debug!("[OpenAI-Signature] Adding GEMINI_SKIP_SIGNATURE for tool_use: {}", tc.id);
                         func_call_part["thoughtSignature"] = json!("skip_thought_signature_validator");
                     }
@@ -415,83 +415,101 @@ pub fn transform_openai_request(
 
     // 为 thinking 模型注入 thinkingConfig (使用 thinkingBudget 而非 thinkingLevel)
     if actual_include_thinking {
-        // [CONFIGURABLE] 根据用户配置决定 thinking_budget 处理方式
-        let tb_config = crate::proxy::config::get_thinking_budget_config();
-        // [FIX #1592] 下调默认 budget 到 24576，以更好地兼容不支持 32k 的 Gemini 原生模型 (如 gemini-3-pro)
-        let user_budget: i64 = user_thinking_budget.map(|b| b as i64).unwrap_or(24576);
-        
-        let budget = match tb_config.mode {
-            crate::proxy::config::ThinkingBudgetMode::Passthrough => {
-                // 透传模式：使用用户传入的值，不做任何限制
-                tracing::debug!(
-                    "[OpenAI-Request] Passthrough mode: using caller's budget {}",
-                    user_budget
-                );
-                user_budget
-            }
-            crate::proxy::config::ThinkingBudgetMode::Custom => {
-                // 自定义模式：使用全局配置的固定值
-                let mut custom_value = tb_config.custom_value as i64;
-                
-                // [FIX #1592/1602] 即使在自定义模式下，针对 Gemini 类模型也必须强制执行 24576 上限
-                // 因为上游 Vertex AI / Gemini API 严禁超过此值（超过必报 400）
-                let is_gemini_limited = mapped_model_lower.contains("gemini")
-                    || is_claude_thinking; // Claude thinking 模型转发到 Gemini 同样受限
+        // [RESOLVE #1694] Check image thinking mode
+        let image_thinking_mode = crate::proxy::config::get_image_thinking_mode();
+        // Only disable if mode is explicitly "disabled" AND it's an image generation request
+        let is_image_gen_disabled = config.request_type == "image_gen" && image_thinking_mode == "disabled";
 
-                if is_gemini_limited && custom_value > 24576 {
-                    tracing::warn!(
-                        "[OpenAI-Request] Custom mode: capping thinking_budget from {} to 24576 for Gemini model {}",
-                        custom_value, mapped_model
+        if is_image_gen_disabled {
+            tracing::debug!("[OpenAI-Request] Image thinking mode disabled: enforcing includeThoughts=false for {}", mapped_model);
+            gen_config["thinkingConfig"] = json!({
+                "includeThoughts": false
+            });
+        } else {
+            // [CONFIGURABLE] 根据用户配置决定 thinking_budget 处理方式
+            let tb_config = crate::proxy::config::get_thinking_budget_config();
+            // [FIX #1592] 下调默认 budget 到 24576，以更好地兼容不支持 32k 的 Gemini 原生模型 (如 gemini-3-pro)
+            let user_budget: i64 = user_thinking_budget.map(|b| b as i64).unwrap_or(24576);
+            
+            let budget = match tb_config.mode {
+                crate::proxy::config::ThinkingBudgetMode::Passthrough => {
+                    // 透传模式：使用用户传入的值，不做任何限制
+                    tracing::debug!(
+                        "[OpenAI-Request] Passthrough mode: using caller's budget {}",
+                        user_budget
                     );
-                    custom_value = 24576;
+                    user_budget
                 }
+                crate::proxy::config::ThinkingBudgetMode::Custom => {
+                    // 自定义模式：使用全局配置的固定值
+                    let mut custom_value = tb_config.custom_value as i64;
+                    
+                    // [FIX #1592/1602] 针对 Gemini 类模型强制执行 24576 上限 (除画图模型外，见用户反馈)
+                    let is_gemini_limited = (mapped_model_lower.contains("gemini") && !mapped_model_lower.contains("-image"))
+                        || is_claude_thinking; 
 
-                tracing::debug!(
-                    "[OpenAI-Request] Custom mode: overriding {} with fixed value {}",
-                    user_budget,
+                    if is_gemini_limited && custom_value > 24576 {
+                        tracing::warn!(
+                            "[OpenAI-Request] Custom mode: capping thinking_budget from {} to 24576 for Gemini model {}",
+                            custom_value, mapped_model
+                        );
+                        custom_value = 24576;
+                    }
+
+                    tracing::debug!(
+                        "[OpenAI-Request] Custom mode: overriding {} with fixed value {}",
+                        user_budget,
+                        custom_value
+                    );
                     custom_value
-                );
-                custom_value
-            }
-            crate::proxy::config::ThinkingBudgetMode::Auto => {
-                // 自动模式：保持原有 Flash capping 逻辑 (向后兼容)
-                // [FIX #1592] 拓宽判定逻辑，确保所有 Gemini 思考模型 (包含 gemini-3-pro 等) 都应用 24k 上限
-                let is_gemini_limited = mapped_model_lower.contains("gemini")
-                    || is_claude_thinking;  // Claude thinking 模型转发到 Gemini，同样需要限速
-                
-                if is_gemini_limited && user_budget > 24576 {
-                    tracing::info!(
-                        "[OpenAI-Request] Auto mode: capping thinking budget from {} to 24576 for model: {}", 
-                        user_budget, mapped_model
-                    );
-                    24576
-                } else {
-                    user_budget
                 }
+                crate::proxy::config::ThinkingBudgetMode::Auto => {
+                    // [FIX #1592] 拓宽判定逻辑，确保所有 Gemini 思考模型都应用 24k 上限 (除画画模型外)
+                    let is_gemini_limited = (mapped_model_lower.contains("gemini") && !mapped_model_lower.contains("-image"))
+                        || is_claude_thinking;  
+                    
+                    if is_gemini_limited && user_budget > 24576 {
+                        tracing::info!(
+                            "[OpenAI-Request] Auto mode: capping thinking budget from {} to 24576 for model: {}", 
+                            user_budget, mapped_model
+                        );
+                        24576
+                    } else {
+                        user_budget
+                    }
+                }
+            };
+
+            gen_config["thinkingConfig"] = json!({
+                "includeThoughts": true,
+                "thinkingBudget": budget
+            });
+
+            // [CRITICAL] 思维模型的 maxOutputTokens 必须大于 thinkingBudget
+            // [FIX #1675] 针对图像模型使用更保守的 max_tokens 增量，避免触发 128k 限制
+            let overhead = if config.request_type == "image_gen" { 2048 } else { 32768 };
+            let min_overhead = if config.request_type == "image_gen" { 1024 } else { 8192 };
+
+            if let Some(max_tokens) = request.max_tokens {
+                 if (max_tokens as i64) <= budget {
+                     gen_config["maxOutputTokens"] = json!(budget + min_overhead);
+                 }
+            } else {
+                 // [FIX #1592] Use a more conservative default to avoid 400 error on 128k context models
+                 gen_config["maxOutputTokens"] = json!(budget + overhead);
             }
-        };
-
-        gen_config["thinkingConfig"] = json!({
-            "includeThoughts": true,
-            "thinkingBudget": budget
-        });
-
-        // [CRITICAL] 思维模型的 maxOutputTokens 必须大于 thinkingBudget
-        // 如果当前 maxOutputTokens 未设置或小于预算，强制提升
-        let current_max = gen_config["maxOutputTokens"].as_i64().unwrap_or(0);
-        if current_max <= budget {
-            let new_max = budget + 8192; // 预留 8k 给实际回答
-            gen_config["maxOutputTokens"] = json!(new_max);
+            
+            let new_max = gen_config["maxOutputTokens"].as_i64().unwrap_or(0);
             tracing::debug!(
                 "[OpenAI-Request] Adjusted maxOutputTokens to {} for thinking model (budget={})",
                 new_max, budget
             );
+            
+            tracing::debug!(
+                "[OpenAI-Request] Injected thinkingConfig for model {}: thinkingBudget={} (mode={:?})",
+                mapped_model, budget, tb_config.mode
+            );
         }
-        
-        tracing::debug!(
-            "[OpenAI-Request] Injected thinkingConfig for model {}: thinkingBudget={} (mode={:?})",
-            mapped_model, budget, tb_config.mode
-        );
     }
 
     if let Some(stop) = &request.stop {
@@ -634,7 +652,13 @@ pub fn transform_openai_request(
         parts.push(json!({"text": antigravity_identity}));
     }
 
-    // 2. 追加用户指令 (作为独立 Parts)
+    // 2. [NEW] 注入全局系统提示词 (紧跟 Antigravity 身份之后)
+    let global_prompt_config = crate::proxy::config::get_global_system_prompt();
+    if global_prompt_config.enabled && !global_prompt_config.content.trim().is_empty() {
+        parts.push(json!({"text": global_prompt_config.content}));
+    }
+
+    // 3. 追加用户指令 (作为独立 Parts)
     for inst in system_instructions {
         parts.push(json!({"text": inst}));
     }
@@ -702,6 +726,7 @@ fn enforce_uppercase_types(value: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::proxy::mappers::openai::models::*;
 
     #[test]
     #[test]
@@ -898,6 +923,49 @@ mod tests {
         assert_eq!(budget, 16000);
     }
     #[test]
+    fn test_gemini_3_pro_image_not_thinking() {
+        let req = OpenAIRequest {
+            model: "gemini-3-pro-image-4k".to_string(),
+            messages: vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: Some(OpenAIContent::String("Generate a cat".to_string())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            }],
+            stream: false,
+            n: None,
+            thinking: None,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            stop: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            instructions: None,
+            input: None,
+            prompt: None,
+            size: Some("1024x1024".to_string()),
+            quality: Some("hd".to_string()),
+            person_generation: None,
+        };
+
+        // Pass gemini-3-pro-image which matches "gemini-3-pro" substring
+        let (result, _sid, _msg_count) = transform_openai_request(&req, "test-p", "gemini-3-pro-image");
+        let gen_config = &result["request"]["generationConfig"];
+        
+        // Assert thinkingConfig IS present (based on latest user feedback)
+        assert!(gen_config.get("thinkingConfig").is_some(), "thinkingConfig SHOULD be injected for gemini-3-pro-image");
+        
+        // Assert imageConfig is present
+        assert!(gen_config.get("imageConfig").is_some(), "imageConfig should be present for image models");
+        assert_eq!(gen_config["imageConfig"]["imageSize"], "4K");
+    }
+
+    #[test]
     fn test_default_max_tokens_openai() {
         let req = OpenAIRequest {
             model: "gpt-4".to_string(),
@@ -931,9 +999,8 @@ mod tests {
         let (result, _sid, _msg_count) = transform_openai_request(&req, "test-p", "gemini-3-pro-high-thinking");
         let gen_config = &result["request"]["generationConfig"];
         let max_output_tokens = gen_config["maxOutputTokens"].as_i64().unwrap();
-        // budget(32000) + 8192 = 40192
-        // actual(32768)
-        assert_eq!(max_output_tokens, 32768);
+        // budget(24576) + overhead(32768) = 57344
+        assert_eq!(max_output_tokens, 57344);
         
         // Verify thinkingBudget
         let budget = gen_config["thinkingConfig"]["thinkingBudget"].as_i64().unwrap();
@@ -985,7 +1052,119 @@ mod tests {
         assert_eq!(budget, 24576);
 
         // Max output tokens should be adjusted based on capped budget (24576 + 8192)
-        let max_output = gen_config["maxOutputTokens"].as_i64().unwrap();
-        assert_eq!(max_output, 32768);
+        // budget(24576) + overhead(32768) = 57344
+        let max_output_tokens = gen_config["maxOutputTokens"].as_i64().unwrap();
+        assert_eq!(max_output_tokens, 57344);
+    }
+    #[test]
+    fn test_vertex_ai_sentinel_injection() {
+        // [FIX #1650] Verify sentinel signature injection for Vertex AI models
+        let req = OpenAIRequest {
+            model: "claude-3-7-sonnet-thinking".to_string(), // Triggers is_thinking_model
+            messages: vec![OpenAIMessage {
+                role: "assistant".to_string(),
+                content: None,
+                reasoning_content: Some("Thinking...".to_string()),
+                tool_calls: Some(vec![ToolCall {
+                    id: "call_123".to_string(),
+                    r#type: "function".to_string(),
+                    function: ToolFunction {
+                        name: "test_tool".to_string(),
+                        arguments: "{}".to_string(),
+                    },
+                }]),
+                tool_call_id: None,
+                name: None,
+            }],
+            stream: false,
+            n: None,
+            max_tokens: None,
+            temperature: None,
+            top_p: None,
+            stop: None,
+            response_format: None,
+            tools: Some(vec![json!({
+                "type": "function",
+                "function": {
+                    "name": "test_tool",
+                    "description": "Test tool",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            instructions: None,
+            input: None,
+            prompt: None,
+            size: None,
+            quality: None,
+            person_generation: None,
+            thinking: None,
+        };
+
+        // Simulate Vertex AI path
+        let mapped_model = "projects/my-project/locations/us-central1/publishers/google/models/gemini-2.0-flash-thinking-exp";
+        
+        let (result, _sid, _msg_count) = transform_openai_request(&req, "test-v", mapped_model);
+        
+        // Extract the tool call part from contents
+        let contents = result["contents"].as_array().unwrap();
+        // Identify the part with functionCall
+        let parts = contents[0]["parts"].as_array().unwrap();
+        let tool_part = parts.iter().find(|p| p.get("functionCall").is_some()).expect("Should find functionCall part");
+        
+        // Vertex AI requires sentinel
+        assert_eq!(tool_part["thoughtSignature"].as_str(), Some("skip_thought_signature_validator"));
+    }
+
+    #[test]
+    fn test_openai_image_thinking_mode_disabled() {
+        // 1. Set global mode to disabled
+        crate::proxy::config::update_image_thinking_mode(Some("disabled".to_string()));
+
+        let req = OpenAIRequest {
+            model: "gemini-3-pro-image".to_string(),
+            messages: vec![OpenAIMessage {
+                role: "user".to_string(),
+                content: Some(OpenAIContent::String("Draw a cat".to_string())),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+                reasoning_content: None,
+            }],
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            n: None,
+            stop: None,
+            response_format: None,
+            instructions: None,
+            input: None,
+            prompt: None,
+            size: None,
+            quality: None,
+            person_generation: None,
+            thinking: None,
+        };
+
+        // 2. Transform request
+        let (result, _sid, _msg_count) = transform_openai_request(&req, "test-proj", "gemini-3-pro-image");
+
+        // 3. Verify thinkingConfig has includeThoughts: false
+        let gen_config = result["request"]["generationConfig"].as_object().expect("Should have generationConfig in request payload");
+        let thinking_config = gen_config["thinkingConfig"].as_object().unwrap();
+        
+        assert_eq!(thinking_config["includeThoughts"], false);
+        
+        // 4. Reset global mode
+        crate::proxy::config::update_image_thinking_mode(Some("enabled".to_string()));
     }
 }
+

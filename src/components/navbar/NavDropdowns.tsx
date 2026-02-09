@@ -142,6 +142,7 @@ export function NavigationDropdown({
                         <Link
                             key={item.path}
                             to={item.path}
+                            draggable="false"
                             onClick={handleNavItemClick}
                             className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-base-100 transition-colors ${isActive(item.path)
                                 ? 'text-blue-500 font-medium bg-blue-50 dark:bg-blue-900/10'

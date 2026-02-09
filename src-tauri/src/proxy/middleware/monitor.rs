@@ -208,6 +208,7 @@ pub async fn monitor_middleware(
                 let mut thinking_content = String::new();
                 let mut response_content = String::new();
                 let mut thinking_signature = String::new();
+                let mut tool_calls: Vec<Value> = Vec::new();
                 
                 for line in full_response.lines() {
                     if !line.starts_with("data: ") {
@@ -219,7 +220,7 @@ pub async fn monitor_middleware(
                     }
                     
                     if let Ok(json) = serde_json::from_str::<Value>(json_str) {
-                        // OpenAI format: choices[0].delta.content / reasoning_content
+                        // OpenAI format: choices[0].delta.content / reasoning_content / tool_calls
                         if let Some(choices) = json.get("choices").and_then(|c| c.as_array()) {
                             for choice in choices {
                                 if let Some(delta) = choice.get("delta") {
@@ -231,23 +232,106 @@ pub async fn monitor_middleware(
                                     if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                                         response_content.push_str(content);
                                     }
+                                    // Tool calls
+                                    if let Some(delta_tool_calls) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+                                        for tc in delta_tool_calls {
+                                            if let Some(index) = tc.get("index").and_then(|i| i.as_u64()) {
+                                                let idx = index as usize;
+                                                while tool_calls.len() <= idx {
+                                                    tool_calls.push(serde_json::json!({
+                                                        "id": "",
+                                                        "type": "function",
+                                                        "function": { "name": "", "arguments": "" }
+                                                    }));
+                                                }
+                                                let current_tc = &mut tool_calls[idx];
+                                                if let Some(id) = tc.get("id").and_then(|v| v.as_str()) {
+                                                    current_tc["id"] = Value::String(id.to_string());
+                                                }
+                                                if let Some(func) = tc.get("function") {
+                                                    if let Some(name) = func.get("name").and_then(|v| v.as_str()) {
+                                                        current_tc["function"]["name"] = Value::String(name.to_string());
+                                                    }
+                                                    if let Some(args) = func.get("arguments").and_then(|v| v.as_str()) {
+                                                        let old_args = current_tc["function"]["arguments"].as_str().unwrap_or("");
+                                                        current_tc["function"]["arguments"] = Value::String(format!("{}{}", old_args, args));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                         
-                        // Claude/Anthropic format: content_block_delta
-                        if let Some(delta) = json.get("delta") {
-                            // Thinking block
-                            if let Some(thinking) = delta.get("thinking").and_then(|v| v.as_str()) {
-                                thinking_content.push_str(thinking);
+                        // Claude/Anthropic format: content_block_start, content_block_delta, etc.
+                        let msg_type = json.get("type").and_then(|t| t.as_str());
+                        match msg_type {
+                            Some("content_block_start") => {
+                                if let (Some(index), Some(block)) = (json.get("index").and_then(|i| i.as_u64()), json.get("content_block")) {
+                                    let idx = index as usize;
+                                    if block.get("type").and_then(|t| t.as_str()) == Some("tool_use") {
+                                        let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                                        let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                        while tool_calls.len() <= idx {
+                                            tool_calls.push(Value::Null);
+                                        }
+                                        tool_calls[idx] = serde_json::json!({
+                                            "id": id,
+                                            "type": "function",
+                                            "function": { "name": name, "arguments": "" }
+                                        });
+                                    }
+                                }
                             }
-                            // Thinking signature
-                            if let Some(sig) = delta.get("signature").and_then(|v| v.as_str()) {
-                                thinking_signature = sig.to_string();
+                            Some("content_block_delta") => {
+                                if let (Some(index), Some(delta)) = (json.get("index").and_then(|i| i.as_u64()), json.get("delta")) {
+                                    let idx = index as usize;
+                                    
+                                    // Tool use input delta
+                                    if let Some(delta_json) = delta.get("input_json_delta").and_then(|v| v.as_str()) {
+                                        if idx < tool_calls.len() && !tool_calls[idx].is_null() {
+                                            let old_args = tool_calls[idx]["function"]["arguments"].as_str().unwrap_or("");
+                                            tool_calls[idx]["function"]["arguments"] = Value::String(format!("{}{}", old_args, delta_json));
+                                        }
+                                    }
+                                    // Legacy/Native thinking block
+                                    if let Some(thinking) = delta.get("thinking").and_then(|v| v.as_str()) {
+                                        thinking_content.push_str(thinking);
+                                    }
+                                    // Text content
+                                    if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                                        response_content.push_str(text);
+                                    }
+                                }
                             }
-                            // Text content
-                            if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
-                                response_content.push_str(text);
+                            Some("message_delta") => {
+                                if let Some(delta) = json.get("delta") {
+                                    if let Some(usage) = delta.get("usage") {
+                                        if let Some(output_tokens) = usage.get("output_tokens").and_then(|v| v.as_u64()) {
+                                            log.output_tokens = Some(output_tokens as u32);
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        
+                        // Legacy Claude delta (for older implementations or simplified streams)
+                        if msg_type.is_none() {
+                            if let Some(delta) = json.get("delta") {
+                                // Thinking block
+                                if let Some(thinking) = delta.get("thinking").and_then(|v| v.as_str()) {
+                                    thinking_content.push_str(thinking);
+                                }
+                                // Thinking signature
+                                if let Some(sig) = delta.get("signature").and_then(|v| v.as_str()) {
+                                    thinking_signature = sig.to_string();
+                                }
+                                // Text content
+                                if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                                    response_content.push_str(text);
+                                }
                             }
                         }
                         
@@ -288,6 +372,13 @@ pub async fn monitor_middleware(
                 }
                 if !response_content.is_empty() {
                     consolidated.insert("content".to_string(), Value::String(response_content));
+                }
+                
+                if !tool_calls.is_empty() {
+                    let clean_tool_calls: Vec<Value> = tool_calls.into_iter().filter(|v| !v.is_null()).collect();
+                    if !clean_tool_calls.is_empty() {
+                        consolidated.insert("tool_calls".to_string(), Value::Array(clean_tool_calls));
+                    }
                 }
                 if let Some(input) = log.input_tokens {
                     consolidated.insert("input_tokens".to_string(), Value::Number(input.into()));
